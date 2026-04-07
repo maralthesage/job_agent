@@ -1,0 +1,55 @@
+# ─────────────────────────────────────────────
+#  Job Agent – Configuration
+# ─────────────────────────────────────────────
+
+# Your details
+candidate:
+  name: "Maral Sheikhzadeh"
+  email: "maral.sheikhzadeh@gmail.com"
+  location: "Neuss, Germany"
+
+# Job search parameters
+search:
+  roles:
+    - "Data Scientist"
+    - "Data Analyst"
+    - "Analytics Engineer"
+    - "ML Engineer"
+    - "Machine Learning Engineer"
+    - "Business Intelligence Analyst"
+    - "Data Engineer"
+  locations:
+    - "Düsseldorf"
+    - "Cologne"
+    - "Neuss"
+    - "NRW"
+    - "North Rhine-Westphalia"
+    - "remote"
+  remote_ok: true
+  languages: ["German", "English"]
+
+# Matching
+matching:
+  threshold: 0.60          # minimum score to process a job (0.0–1.0)
+  max_jobs_per_run: 30     # safety cap per scraper run
+
+# Email digest
+email:
+  smtp_server: "smtp.gmail.com"
+  smtp_port: 587
+  sender: "maral.sheikhzadeh@gmail.com"
+  recipient: "maral.sheikhzadeh@gmail.com"
+  # Set GMAIL_APP_PASSWORD env variable – never put password here
+
+# Anthropic API
+anthropic:
+  model: "claude-opus-4-6"   # best for resume analysis
+  max_tokens: 4096
+
+# Paths
+paths:
+  resume_en: "resume/Maral_Sheikhzadeh_CV_EN.pdf"
+  resume_de: "resume/Maral_Sheikhzadeh_CV_DE.pdf"
+  database: "data/jobs.db"
+  output_dir: "output/"
+  optimized_resumes: "output/optimized_resumes/"
