@@ -91,13 +91,14 @@ def mock_jobs() -> list:
 
 
 # ── Main pipeline ─────────────────────────────────────────────────────────────
-async def run_pipeline(config: dict, test_mode: bool = False):
+async def run_pipeline(config: dict, test_mode: bool = False, start_server: bool = True):
     """
     Core job agent pipeline.
 
     Args:
         config: user config dict with roles, locations, cv_text, match_threshold
         test_mode: if True, use mock jobs instead of scraping
+        start_server: if True, start the HTTP server (set False when called from dashboard)
     """
     log("=" * 55)
     log("Job Agent starting")
@@ -115,8 +116,11 @@ async def run_pipeline(config: dict, test_mode: bool = False):
     # DEBUG: Log what we loaded
     log(f"Loaded config: roles={roles}, cv_text_len={len(cv_text) if cv_text else 0}, threshold={match_threshold}")
 
-    # Step 1: Start live digest server immediately (before scraping)
-    httpd = start_server_thread()
+    # Step 1: Start live digest server (unless already running from dashboard)
+    httpd = None
+    if start_server:
+        httpd = start_server_thread()
+        log("Started HTTP server for digest")
 
     # Step 2: Scrape — save each new job to DB as soon as it's found
     newly_scraped = []
@@ -159,14 +163,17 @@ async def run_pipeline(config: dict, test_mode: bool = False):
         set_done()
 
     log("=" * 55)
-    log("Done. Digest server running — press Ctrl+C to stop.")
-    log("=" * 55)
-
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        httpd.server_close()
+    if start_server:
+        log("Done. Digest server running — press Ctrl+C to stop.")
+        log("=" * 55)
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            httpd.server_close()
+    else:
+        log("Done. Digest will refresh automatically.")
+        log("=" * 55)
 
 
 async def run(test_mode: bool = False):

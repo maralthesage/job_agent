@@ -350,7 +350,7 @@ class DigestHandler(BaseHTTPRequestHandler):
                     print(f"[Server /run] Loaded config: cv_text_len={len(config.get('cv_text', ''))}")
                     _state["processing"] = True
                     try:
-                        asyncio.run(run_pipeline(config, test_mode=False))
+                        asyncio.run(run_pipeline(config, test_mode=False, start_server=False))
                     except Exception as e:
                         print(f"[Error] Background run failed: {e}")
                     finally:
