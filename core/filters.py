@@ -16,7 +16,14 @@ TITLE_KEYWORDS = [
 ]
 
 
-def title_matches(title: str) -> bool:
-    """Return True if the job title contains any of the required keywords."""
+def title_matches(title: str, keywords: list = None) -> bool:
+    """
+    Return True if the job title contains any of the required keywords.
+
+    Args:
+        title: job title string
+        keywords: optional list of keywords to match; uses TITLE_KEYWORDS if not provided
+    """
     t = title.lower()
-    return any(kw in t for kw in TITLE_KEYWORDS)
+    kws = keywords if keywords is not None else TITLE_KEYWORDS
+    return any(kw.lower() in t for kw in kws)

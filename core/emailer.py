@@ -196,6 +196,12 @@ def build_html(jobs: List[Dict]) -> str:
              border-radius:10px;padding:10px 16px;margin-bottom:12px;
              font-size:13px;font-weight:500;text-align:center;"></div>
 
+        <!-- Navigation -->
+        <div style="margin-bottom:20px;display:flex;gap:16px;">
+          <a href="/" style="color:#2563eb;text-decoration:none;font-weight:500;">📊 Job Digest</a>
+          <a href="/settings" style="color:#2563eb;text-decoration:none;font-weight:500;">⚙ Settings</a>
+        </div>
+
         <!-- Header -->
         <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);
                     border-radius:16px;padding:28px;margin-bottom:24px;color:#fff;">

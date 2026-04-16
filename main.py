@@ -17,6 +17,7 @@ from core.db import init_db, is_seen, mark_seen, update_job_score, log_digest
 from core.agent import score_job
 from core.server import serve_digest, start_server_thread, set_done
 from core.filters import title_matches, MATCH_THRESHOLD
+from core.user_config import load_config
 
 
 # ── Config ──────────────────────────────────────────────────────────────────
@@ -29,16 +30,16 @@ def log(msg: str):
 
 
 # ── Scrapers ─────────────────────────────────────────────────────────────────
-async def run_scrapers(on_job=None) -> list:
+async def run_scrapers(on_job=None, roles=None, locations=None) -> list:
     from scrapers.linkedin import scrape_linkedin
     from scrapers.stepstone import scrape_stepstone
     from scrapers.xing import scrape_xing
 
     log("Starting scrapers...")
     results = await asyncio.gather(
-        scrape_linkedin(MAX_JOBS_PER_SOURCE, on_job=on_job),
-        scrape_stepstone(MAX_JOBS_PER_SOURCE, on_job=on_job),
-        scrape_xing(MAX_JOBS_PER_SOURCE, on_job=on_job),
+        scrape_linkedin(MAX_JOBS_PER_SOURCE, on_job=on_job, roles=roles, locations=locations),
+        scrape_stepstone(MAX_JOBS_PER_SOURCE, on_job=on_job, roles=roles, locations=locations),
+        scrape_xing(MAX_JOBS_PER_SOURCE, on_job=on_job, roles=roles, locations=locations),
         return_exceptions=True
     )
 
@@ -90,12 +91,26 @@ def mock_jobs() -> list:
 
 
 # ── Main pipeline ─────────────────────────────────────────────────────────────
-async def run(test_mode: bool = False):
+async def run_pipeline(config: dict, test_mode: bool = False):
+    """
+    Core job agent pipeline.
+
+    Args:
+        config: user config dict with roles, locations, cv_text, match_threshold
+        test_mode: if True, use mock jobs instead of scraping
+    """
     log("=" * 55)
     log("Job Agent starting")
     log("=" * 55)
 
     init_db()
+
+    # Extract config values
+    roles = config.get("roles", [])
+    locations = config.get("locations", [])
+    cv_text = config.get("cv_text", "")
+    match_threshold = config.get("match_threshold", MATCH_THRESHOLD)
+    title_keywords = [kw.lower() for kw in roles]  # Use roles as title keywords
 
     # Step 1: Start live digest server immediately (before scraping)
     httpd = start_server_thread()
@@ -113,7 +128,7 @@ async def run(test_mode: bool = False):
         for job in mock_jobs():
             save_if_new(job)
     else:
-        await run_scrapers(on_job=save_if_new)
+        await run_scrapers(on_job=save_if_new, roles=roles, locations=locations)
 
     log(f"Scraped {len(newly_scraped)} new jobs")
 
@@ -123,20 +138,20 @@ async def run(test_mode: bool = False):
         set_done()
     else:
         # Step 3: Score only jobs with relevant titles (skip LLM call for irrelevant ones)
-        to_score = [j for j in newly_scraped if title_matches(j.get("title", ""))]
+        to_score = [j for j in newly_scraped if title_matches(j.get("title", ""), keywords=title_keywords if title_keywords else None)]
         skipped = len(newly_scraped) - len(to_score)
         if skipped:
             log(f"Skipping {skipped} jobs with non-matching titles")
 
         for i, job in enumerate(to_score):
             log(f"Scoring [{i+1}/{len(to_score)}]: {job['title']} @ {job['company']}")
-            score, details = score_job(job, threshold=MATCH_THRESHOLD)
+            score, details = score_job(job, threshold=match_threshold, cv_text=cv_text if cv_text else None)
             job["match_score"] = score
             update_job_score(job["id"], score)  # page auto-refreshes with new score
             log(f"  → {int(score*100)}% — {details.get('reason', '')}")
 
-        matched_count = sum(1 for j in to_score if j.get("match_score", 0) >= MATCH_THRESHOLD)
-        log(f"\nScored {len(to_score)} relevant jobs, {matched_count} above {int(MATCH_THRESHOLD*100)}%")
+        matched_count = sum(1 for j in to_score if j.get("match_score", 0) >= match_threshold)
+        log(f"\nScored {len(to_score)} relevant jobs, {matched_count} above {int(match_threshold*100)}%")
         log_digest(len(to_score), "sent")
         set_done()
 
@@ -149,6 +164,12 @@ async def run(test_mode: bool = False):
             time.sleep(1)
     except KeyboardInterrupt:
         httpd.server_close()
+
+
+async def run(test_mode: bool = False):
+    """Load config and run the pipeline."""
+    config = load_config()
+    await run_pipeline(config, test_mode=test_mode)
 
 
 def run_from_db(days: int = 30):

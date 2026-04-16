@@ -24,16 +24,29 @@ def make_job_id(url: str) -> str:
     return "linkedin_" + hashlib.md5(url.encode()).hexdigest()[:12]
 
 
-async def scrape_linkedin(max_jobs: int = 20, on_job=None) -> List[Dict]:
+async def scrape_linkedin(max_jobs: int = 20, on_job=None, roles: List[str] = None, locations: List[str] = None) -> List[Dict]:
     """
     Scrapes LinkedIn job listings using Playwright.
     Returns list of job dicts with title, company, location, url, description.
+
+    Args:
+        max_jobs: maximum jobs to return
+        on_job: callback function called when a job is found
+        roles: optional list of role keywords; uses SEARCH_QUERIES default if not provided
+        locations: optional list of locations; uses SEARCH_QUERIES default if not provided
     """
     try:
         from playwright.async_api import async_playwright
     except ImportError:
         print("[LinkedIn] playwright not installed. Run: pip install playwright && playwright install chromium")
         return []
+
+    # Build queries from roles/locations if provided, otherwise use defaults
+    if roles and locations:
+        from core.user_config import build_scraper_queries
+        queries = build_scraper_queries(roles, locations, key_role="keywords", key_loc="location")
+    else:
+        queries = SEARCH_QUERIES
 
     jobs = []
 
@@ -45,7 +58,7 @@ async def scrape_linkedin(max_jobs: int = 20, on_job=None) -> List[Dict]:
                        "Chrome/120.0.0.0 Safari/537.36"
         )
 
-        for query in SEARCH_QUERIES:
+        for query in queries:
             if len(jobs) >= max_jobs:
                 break
             try:

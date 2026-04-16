@@ -28,26 +28,67 @@ def _call(prompt: str, max_tokens: int = 1024) -> str:
     return text
 
 
-def score_job(job: Dict, threshold: float = 0.60) -> Tuple[float, Dict]:
+def _extract_domain_keywords(cv_text: str) -> str:
+    """
+    Extract key domain/industry keywords from CV to guide job matching.
+    Looks for industry names, materials, tools, and company types.
+    """
+    keywords = set()
+
+    # Industry/material keywords to look for
+    domain_terms = {
+        "food", "beverage", "ingredient", "aroma", "extract", "flavor", "flavour",
+        "material", "raw material", "chemical", "supplier", "ingredient supplier",
+        "b2b", "account management", "business development", "sales",
+        "dairy", "confectionery", "bakery", "ice cream", "soft drink",
+        "supply chain", "procurement", "commercial", "technical sales",
+        "regulatory", "quality", "product development", "innovation",
+        "key account", "stakeholder", "relationship", "negotiation",
+        "dach", "germany", "europe"
+    }
+
+    cv_lower = cv_text.lower()
+    for term in domain_terms:
+        if term in cv_lower:
+            keywords.add(term)
+
+    return ", ".join(sorted(keywords)) if keywords else "business development, sales, account management"
+
+
+def score_job(job: Dict, threshold: float = 0.60, cv_text: str = None) -> Tuple[float, Dict]:
     """
     Score how well Maral's resume matches a job description.
     Returns (score, details_dict).
+
+    Args:
+        job: job dict with title, company, location, description
+        threshold: (unused, kept for compatibility)
+        cv_text: if provided, use this CV text; otherwise fall back to hardcoded EN/DE resume
     """
     description = job.get("description", "")
     if not description or len(description) < 50:
         return 0.0, {"error": "no description"}
 
-    # Use DE resume if job is likely German-language
-    de_keywords = ["wir suchen", "ihre aufgaben", "kenntnisse", "deutsch", "anforderungen"]
-    is_german = any(kw in description.lower() for kw in de_keywords)
-    resume = MARAL_RESUME_DE if is_german else MARAL_RESUME_EN
+    # Use provided CV text, or fall back to EN/DE auto-detect
+    if cv_text:
+        resume = cv_text
+    else:
+        # Use DE resume if job is likely German-language
+        de_keywords = ["wir suchen", "ihre aufgaben", "kenntnisse", "deutsch", "anforderungen"]
+        is_german = any(kw in description.lower() for kw in de_keywords)
+        resume = MARAL_RESUME_DE if is_german else MARAL_RESUME_EN
 
-    prompt = f"""You are a senior technical recruiter evaluating a candidate for a data science/analytics role.
+    # Extract domain keywords from CV to guide scoring
+    domain_keywords = _extract_domain_keywords(resume)
 
-Analyze the match between this candidate's resume and the job description below.
+    prompt = f"""You are a senior recruiter evaluating a candidate's fit for a job opportunity.
+
+Analyze the match between this candidate's resume and the job description.
 
 CANDIDATE RESUME:
 {resume}
+
+CANDIDATE'S DOMAIN EXPERTISE: {domain_keywords}
 
 JOB TITLE: {job.get('title', 'N/A')}
 COMPANY: {job.get('company', 'N/A')}
@@ -67,10 +108,18 @@ Respond ONLY with a valid JSON object (no markdown, no preamble) with these exac
 }}
 
 Scoring guide:
-- 0.9–1.0: near-perfect match (most required skills present, strong experience alignment)
-- 0.7–0.9: strong match (key skills present, some minor gaps)
-- 0.6–0.7: decent match (core skills align, a few gaps)
-- below 0.6: weak match (significant gaps in required skills or experience)
+- 0.9–1.0: near-perfect match (required skills present, strong experience/industry alignment)
+- 0.7–0.9: strong match (key skills present, matching industry or role type)
+- 0.5–0.7: moderate match (some relevant skills, but significant gaps in industry fit or seniority)
+- below 0.5: weak match (minimal industry/role alignment or major skill gaps)
+
+EVALUATION CRITERIA:
+1. Industry/domain fit: Does the job align with candidate's core expertise ({domain_keywords})?
+2. Role alignment: Does the job fit the candidate's career path (sales, business development, account management)?
+3. Skills match: Are the technical and soft skills required present in the resume?
+4. Experience: Is the candidate's seniority and background appropriate?
+
+Prioritize industry fit and role alignment heavily — a generic sales job in a different industry should score lower than a niche fit in the candidate's domain.
 """
 
     try:
@@ -84,19 +133,29 @@ Scoring guide:
         return 0.0, {"error": str(e)}
 
 
-def optimize_resume(job: Dict, match_details: Dict) -> str:
+def optimize_resume(job: Dict, match_details: Dict, cv_text: str = None) -> str:
     """
-    Generate a tailored version of Maral's resume for a specific job.
+    Generate a tailored version of the resume for a specific job.
     Rules enforced in prompt:
       - No invented skills or experience
       - Only reframing, reordering, keyword alignment
       - Language matches the job (DE or EN)
     Returns the optimized resume as markdown text.
+
+    Args:
+        job: job dict with title, company, location, description
+        match_details: dict with matching_skills, missing_skills, etc.
+        cv_text: if provided, use this CV text; otherwise fall back to hardcoded EN/DE resume
     """
     description = job.get("description", "")
     de_keywords = ["wir suchen", "ihre aufgaben", "kenntnisse", "deutsch", "anforderungen"]
     is_german = any(kw in description.lower() for kw in de_keywords)
-    resume = MARAL_RESUME_DE if is_german else MARAL_RESUME_EN
+
+    if cv_text:
+        resume = cv_text
+    else:
+        resume = MARAL_RESUME_DE if is_german else MARAL_RESUME_EN
+
     lang = "German" if is_german else "English"
 
     matching = ", ".join(match_details.get("matching_skills", []))
