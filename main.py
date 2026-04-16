@@ -148,7 +148,7 @@ async def run_pipeline(config: dict, test_mode: bool = False):
 
         for i, job in enumerate(to_score):
             log(f"Scoring [{i+1}/{len(to_score)}]: {job['title']} @ {job['company']}")
-            score, details = score_job(job, threshold=match_threshold, cv_text=cv_text if cv_text else None)
+            score, details = score_job(job, threshold=match_threshold, cv_text=cv_text if cv_text else None, target_roles=roles)
             job["match_score"] = score
             update_job_score(job["id"], score)  # page auto-refreshes with new score
             log(f"  → {int(score*100)}% — {details.get('reason', '')}")

@@ -30,40 +30,67 @@ def _call(prompt: str, max_tokens: int = 1024) -> str:
 
 def _extract_domain_keywords(cv_text: str) -> str:
     """
-    Extract key domain/industry keywords from CV to guide job matching.
-    Looks for industry names, materials, tools, and company types.
+    Extract key technical skills and expertise from CV to guide job matching.
+    Looks for programming languages, tools, methodologies, and domains mentioned.
     """
     keywords = set()
+    cv_lower = cv_text.lower()
 
-    # Industry/material keywords to look for
-    domain_terms = {
-        "food", "beverage", "ingredient", "aroma", "extract", "flavor", "flavour",
-        "material", "raw material", "chemical", "supplier", "ingredient supplier",
-        "b2b", "account management", "business development", "sales",
-        "dairy", "confectionery", "bakery", "ice cream", "soft drink",
-        "supply chain", "procurement", "commercial", "technical sales",
-        "regulatory", "quality", "product development", "innovation",
-        "key account", "stakeholder", "relationship", "negotiation",
-        "dach", "germany", "europe"
+    # Technical skills and tools to look for (language/framework agnostic)
+    technical_terms = {
+        # Programming languages
+        "python", "sql", "r", "java", "javascript", "scala", "go",
+        # Data stack
+        "pandas", "numpy", "spark", "pyspark", "dask", "polars",
+        "hadoop", "hive", "presto", "snowflake", "redshift", "bigquery",
+        "postgres", "mysql", "mongodb", "cassandra", "elasticsearch",
+        # ML/AI
+        "scikit-learn", "sklearn", "tensorflow", "pytorch", "keras",
+        "xgboost", "lightgbm", "catboost", "mlflow", "huggingface",
+        "transformer", "bert", "gpt", "llm", "langchain", "rag",
+        # Data engineering & pipelines
+        "etl", "elt", "airflow", "dbt", "prefect", "luigi",
+        "kafka", "kinesis", "rabbitmq", "nifi",
+        # Analytics & BI
+        "tableau", "power bi", "qlik", "looker", "streamlit", "dash",
+        "plotly", "matplotlib", "seaborn", "ggplot",
+        # Cloud & infrastructure
+        "aws", "gcp", "google cloud", "azure", "docker", "kubernetes",
+        "jenkins", "gitlab", "github actions", "ci/cd",
+        # Databases & data warehousing
+        "data warehouse", "data lake", "delta lake", "iceberg",
+        # Core competencies
+        "machine learning", "deep learning", "nlp", "computer vision",
+        "forecasting", "regression", "classification", "clustering",
+        "time series", "anomaly detection", "feature engineering",
+        "data engineering", "data science", "analytics", "analysis",
+        "statistical", "statistical modeling", "ab testing",
+        # Soft skills for data roles
+        "stakeholder", "communication", "documentation",
+        "version control", "git", "experimentation"
     }
 
-    cv_lower = cv_text.lower()
-    for term in domain_terms:
+    for term in technical_terms:
         if term in cv_lower:
             keywords.add(term)
 
-    return ", ".join(sorted(keywords)) if keywords else "business development, sales, account management"
+    # If no keywords found, return generic data science keywords
+    if not keywords:
+        return "data science, analytics, machine learning, python, sql"
+
+    return ", ".join(sorted(keywords))
 
 
-def score_job(job: Dict, threshold: float = 0.60, cv_text: str = None) -> Tuple[float, Dict]:
+def score_job(job: Dict, threshold: float = 0.60, cv_text: str = None, target_roles: list = None) -> Tuple[float, Dict]:
     """
-    Score how well Maral's resume matches a job description.
+    Score how well a candidate's resume matches a job description.
     Returns (score, details_dict).
 
     Args:
         job: job dict with title, company, location, description
         threshold: (unused, kept for compatibility)
         cv_text: if provided, use this CV text; otherwise fall back to hardcoded EN/DE resume
+        target_roles: list of target job roles (e.g., ["Data Scientist", "Data Analyst"]) to guide scoring
     """
     description = job.get("description", "")
     if not description or len(description) < 50:
@@ -83,6 +110,12 @@ def score_job(job: Dict, threshold: float = 0.60, cv_text: str = None) -> Tuple[
     # Extract domain keywords from CV to guide scoring
     domain_keywords = _extract_domain_keywords(resume)
 
+    # Build role alignment description
+    if target_roles and len(target_roles) > 0:
+        target_roles_str = ", ".join(target_roles)
+    else:
+        target_roles_str = "data science, analytics, machine learning, engineering roles"
+
     prompt = f"""You are a senior recruiter evaluating a candidate's fit for a job opportunity.
 
 Analyze the match between this candidate's resume and the job description.
@@ -91,6 +124,8 @@ CANDIDATE RESUME:
 {resume}
 
 CANDIDATE'S DOMAIN EXPERTISE: {domain_keywords}
+
+TARGET ROLES: {target_roles_str}
 
 JOB TITLE: {job.get('title', 'N/A')}
 COMPANY: {job.get('company', 'N/A')}
@@ -112,16 +147,18 @@ Respond ONLY with a valid JSON object (no markdown, no preamble) with these exac
 Scoring guide:
 - 0.9–1.0: near-perfect match (required skills present, strong experience/industry alignment)
 - 0.7–0.9: strong match (key skills present, matching industry or role type)
-- 0.5–0.7: moderate match (some relevant skills, but significant gaps in industry fit or seniority)
-- below 0.5: weak match (minimal industry/role alignment or major skill gaps)
+- 0.5–0.7: moderate match (some relevant skills, but gaps in some technical skills or seniority)
+- 0.3–0.5: weak match (transferable skills present, but significant gaps or different domain)
+- below 0.3: poor match (different career path or missing core competencies)
 
 EVALUATION CRITERIA:
-1. Industry/domain fit: Does the job align with candidate's core expertise ({domain_keywords})?
-2. Role alignment: Does the job fit the candidate's career path (sales, business development, account management)?
-3. Skills match: Are the technical and soft skills required present in the resume?
-4. Experience: Is the candidate's seniority and background appropriate?
+1. Role alignment: Does the job fit the candidate's target roles ({target_roles_str})?
+2. Skills match: Are the core technical and soft skills required present in the resume?
+3. Industry/domain fit: Does the candidate's expertise align with the job domain?
+4. Experience level: Is the candidate's seniority and background appropriate?
 
-Prioritize industry fit and role alignment heavily — a generic sales job in a different industry should score lower than a niche fit in the candidate's domain.
+Be generous with scoring for jobs that match the target roles and contain relevant technical skills — the candidate is actively seeking these roles.
+Prioritize skills match and role alignment. Do not be overly strict about having every single skill mentioned.
 """
 
     try:
