@@ -15,17 +15,31 @@ from core.resume_data import MARAL_RESUME_EN, MARAL_RESUME_DE
 MODEL = "gemma4:e4b"
 
 
-def _call(prompt: str, max_tokens: int = 1024) -> str:
-    """Call Ollama and return the text, stripping any <think> blocks."""
-    response = ollama.chat(
-        model=MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        options={"num_predict": max_tokens, "temperature": 0.1},
-    )
-    text = response.message.content.strip()
-    # Qwen3 wraps reasoning in <think>...</think> — remove it
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-    return text
+def _call(prompt: str, max_tokens: int = 2500) -> str:
+    """Call Ollama and return the text, stripping any <think> blocks.
+
+    Note: Qwen3 uses internal thinking which consumes ~1500 tokens,
+    so we need 2500+ tokens to leave room for the actual response.
+    """
+    try:
+        response = ollama.chat(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            options={"num_predict": max_tokens, "temperature": 0.1},
+        )
+        text = response.message.content.strip()
+
+        # Qwen3 wraps reasoning in <think>...</think> — remove it
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
+        # Remove markdown code blocks (```json ... ``` or ``` ... ```)
+        text = re.sub(r"```(?:json)?\s*", "", text).strip()
+
+        return text
+    except Exception as e:
+        print(f"[Ollama] Error calling model '{MODEL}': {e}")
+        print(f"[Ollama] Make sure Ollama is running: ollama serve")
+        raise
 
 
 def _extract_domain_keywords(cv_text: str) -> str:
@@ -162,11 +176,25 @@ Prioritize skills match and role alignment. Do not be overly strict about having
 """
 
     try:
-        raw = _call(prompt, max_tokens=1024)
+        raw = _call(prompt, max_tokens=2500)  # Qwen3 thinking consumes ~1500 tokens, leaving ~1000 for JSON
         raw = re.sub(r"```json|```", "", raw).strip()
+
+        # Debug: show what we got back
+        if not raw:
+            print(f"[Agent] WARNING: Empty response from Ollama for '{job.get('title')}'")
+            return 0.0, {"error": "empty_response"}
+
+        if not raw.startswith('{'):
+            print(f"[Agent] WARNING: Response doesn't start with JSON for '{job.get('title')}'")
+            print(f"[Agent] First 200 chars: {raw[:200]}")
+
         result = json.loads(raw)
         score = float(result.get("match_score", 0.0))
         return score, result
+    except json.JSONDecodeError as e:
+        print(f"[Agent] JSON error for '{job.get('title')}': {e}")
+        print(f"[Agent] Raw response: {raw[:300]}")
+        return 0.0, {"error": f"json_error: {str(e)}"}
     except Exception as e:
         print(f"[Agent] scoring error for '{job.get('title')}': {e}")
         return 0.0, {"error": str(e)}
