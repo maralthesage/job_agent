@@ -181,8 +181,15 @@ def build_html(jobs: List[Dict]) -> str:
             card.style.opacity = applied ? '0.5' : '1';
             badge.style.display = applied ? 'inline-block' : 'none';
           }} catch(e) {{
-            checkbox.checked = !applied;  // revert on error
+            checkbox.checked = !applied;
             alert('Could not save. Is the job agent server running?');
+          }}
+        }}
+
+        function clearCache() {{
+          if (confirm('Clear all saved preferences and browser cache?')) {{
+            localStorage.removeItem('jobAgentConfig');
+            alert('Cache cleared. Your preferences have been reset.');
           }}
         }}
       </script>
@@ -197,9 +204,12 @@ def build_html(jobs: List[Dict]) -> str:
              font-size:13px;font-weight:500;text-align:center;"></div>
 
         <!-- Navigation -->
-        <div style="margin-bottom:20px;display:flex;gap:16px;">
-          <a href="/" style="color:#2563eb;text-decoration:none;font-weight:500;">📊 Job Digest</a>
-          <a href="/settings" style="color:#2563eb;text-decoration:none;font-weight:500;">⚙ Settings</a>
+        <div style="margin-bottom:20px;display:flex;gap:16px;justify-content:space-between;">
+          <div style="display:flex;gap:16px;">
+            <a href="/" style="color:#2563eb;text-decoration:none;font-weight:500;">📊 Job Digest</a>
+            <a href="/settings" style="color:#2563eb;text-decoration:none;font-weight:500;">⚙ Settings</a>
+          </div>
+          <button onclick="clearCache()" style="background:#e74c3c;color:white;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:500;font-size:13px;">🗑️ Clear Cache</button>
         </div>
 
         <!-- Header -->
@@ -209,8 +219,7 @@ def build_html(jobs: List[Dict]) -> str:
           <p style="margin:0;opacity:0.85;font-size:14px;">{now}</p>
           <p style="margin:8px 0 0;font-size:28px;font-weight:700;">{count} job{"s" if count != 1 else ""}</p>
           <p style="margin:4px 0 0;opacity:0.75;font-size:13px;">
-            LinkedIn · Stepstone · Xing &nbsp;|&nbsp;
-            NRW + Remote &nbsp;|&nbsp; {matched_count} above {int(MATCH_THRESHOLD*100)}% match
+            {matched_count} above {int(MATCH_THRESHOLD*100)}% match
           </p>
         </div>
 

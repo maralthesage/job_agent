@@ -30,26 +30,41 @@ def log(msg: str):
 
 
 # ── Scrapers ─────────────────────────────────────────────────────────────────
-async def run_scrapers(on_job=None, roles=None, locations=None) -> list:
+async def run_scrapers(on_job=None, roles=None, locations=None, enabled_scrapers=None) -> list:
     from scrapers.linkedin import scrape_linkedin
     from scrapers.stepstone import scrape_stepstone
     from scrapers.xing import scrape_xing
 
     log("Starting scrapers...")
+    scrapers_map = {
+        "linkedin": (scrape_linkedin, "LinkedIn"),
+        "stepstone": (scrape_stepstone, "Stepstone"),
+        "xing": (scrape_xing, "Xing"),
+    }
+
+    active = enabled_scrapers if enabled_scrapers else list(scrapers_map.keys())
+    tasks = {}
+    for scraper_name in active:
+        if scraper_name in scrapers_map:
+            scraper_fn, label = scrapers_map[scraper_name]
+            tasks[scraper_name] = (scraper_fn(MAX_JOBS_PER_SOURCE, on_job=on_job, roles=roles, locations=locations), label)
+
+    if not tasks:
+        log("No active scrapers selected")
+        return []
+
     results = await asyncio.gather(
-        scrape_linkedin(MAX_JOBS_PER_SOURCE, on_job=on_job, roles=roles, locations=locations),
-        scrape_stepstone(MAX_JOBS_PER_SOURCE, on_job=on_job, roles=roles, locations=locations),
-        scrape_xing(MAX_JOBS_PER_SOURCE, on_job=on_job, roles=roles, locations=locations),
+        *[task[0] for task in tasks.values()],
         return_exceptions=True
     )
 
     all_jobs = []
-    sources = ["LinkedIn", "Stepstone", "Xing"]
-    for i, result in enumerate(results):
+    for i, (scraper_name, (_, label)) in enumerate(tasks.items()):
+        result = results[i]
         if isinstance(result, Exception):
-            log(f"[{sources[i]}] scraper failed: {result}")
+            log(f"[{label}] scraper failed: {result}")
         else:
-            log(f"[{sources[i]}] found {len(result)} listings")
+            log(f"[{label}] found {len(result)} listings")
             all_jobs.extend(result)
 
     return all_jobs
@@ -106,12 +121,12 @@ async def run_pipeline(config: dict, test_mode: bool = False, start_server: bool
 
     init_db()
 
-    # Extract config values
     roles = config.get("roles", [])
     locations = config.get("locations", [])
     cv_text = config.get("cv_text", "")
     match_threshold = config.get("match_threshold", MATCH_THRESHOLD)
-    title_keywords = [kw.lower() for kw in roles]  # Use roles as title keywords
+    enabled_scrapers = config.get("enabled_scrapers", ["linkedin", "stepstone", "xing"])
+    title_keywords = [kw.lower() for kw in roles]
 
     # DEBUG: Log what we loaded
     log(f"Loaded config: roles={roles}, cv_text_len={len(cv_text) if cv_text else 0}, threshold={match_threshold}")
@@ -135,7 +150,7 @@ async def run_pipeline(config: dict, test_mode: bool = False, start_server: bool
         for job in mock_jobs():
             save_if_new(job)
     else:
-        await run_scrapers(on_job=save_if_new, roles=roles, locations=locations)
+        await run_scrapers(on_job=save_if_new, roles=roles, locations=locations, enabled_scrapers=enabled_scrapers)
 
     log(f"Scraped {len(newly_scraped)} new jobs")
 

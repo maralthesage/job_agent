@@ -1,4 +1,4 @@
-# 🔍 Job Agent — Maral's Automated Job Search
+# 🔍 Job Agent — Automated Job Search
 
 An AI-powered job agent that runs on your Mac, scrapes LinkedIn, Indeed, and Xing
 for Data Science / Data Analyst / ML Engineer roles in NRW and remote,

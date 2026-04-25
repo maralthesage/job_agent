@@ -10,7 +10,7 @@ from typing import Dict, Tuple
 
 import ollama
 
-from core.resume_data import MARAL_RESUME_EN, MARAL_RESUME_DE
+from core.resume_data import USER_RESUME_EN, USER_RESUME_DE
 
 MODEL = "gemma4:e4b"
 
@@ -118,7 +118,7 @@ def score_job(job: Dict, threshold: float = 0.60, cv_text: str = None, target_ro
         # Use DE resume if job is likely German-language
         de_keywords = ["wir suchen", "ihre aufgaben", "kenntnisse", "deutsch", "anforderungen"]
         is_german = any(kw in description.lower() for kw in de_keywords)
-        resume = MARAL_RESUME_DE if is_german else MARAL_RESUME_EN
+        resume = USER_RESUME_DE if is_german else USER_RESUME_EN
         print(f"[Agent] Using fallback resume ({'DE' if is_german else 'EN'})")
 
     # Extract domain keywords from CV to guide scoring
@@ -221,7 +221,7 @@ def optimize_resume(job: Dict, match_details: Dict, cv_text: str = None) -> str:
     if cv_text:
         resume = cv_text
     else:
-        resume = MARAL_RESUME_DE if is_german else MARAL_RESUME_EN
+        resume = USER_RESUME_DE if is_german else USER_RESUME_EN
 
     lang = "German" if is_german else "English"
 

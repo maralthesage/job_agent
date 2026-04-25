@@ -2,20 +2,20 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  com.maral.jobagent.plist
+  com.jobagent.plist
   ─────────────────────────────────────────────────────────
   macOS launchd agent — runs job_agent every hour.
 
   INSTALLATION:
     1. Edit the paths below to match where you cloned this project.
     2. Copy to LaunchAgents:
-         cp com.maral.jobagent.plist ~/Library/LaunchAgents/
+         cp com.jobagent.plist ~/Library/LaunchAgents/
     3. Load it:
-         launchctl load ~/Library/LaunchAgents/com.maral.jobagent.plist
+         launchctl load ~/Library/LaunchAgents/com.jobagent.plist
     4. To unload (stop):
-         launchctl unload ~/Library/LaunchAgents/com.maral.jobagent.plist
+         launchctl unload ~/Library/LaunchAgents/com.jobagent.plist
     5. To run manually right now:
-         launchctl start com.maral.jobagent
+         launchctl start com.jobagent
     6. Check logs:
          tail -f /tmp/job_agent.log
   ─────────────────────────────────────────────────────────

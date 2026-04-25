@@ -1,6 +1,7 @@
 """
 server.py — Local HTTP server for the interactive job digest.
 Serves the HTML digest and handles checkbox (applied) state changes.
+User preferences are now managed via browser localStorage only.
 """
 import asyncio
 import json
@@ -10,7 +11,6 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs
 
 from core.db import mark_applied, get_recent_jobs
-from core.user_config import load_config, save_config
 from core.cv_parser import extract_pdf_text
 
 _state = {"processing": False}
@@ -23,37 +23,22 @@ class DigestHandler(BaseHTTPRequestHandler):
         if self.path == "/":
             from core.emailer import build_html
             from core.filters import title_matches, MATCH_THRESHOLD
-            config = load_config()
             rows = get_recent_jobs(days=self.days)
-            title_keywords = config.get("roles", [])
             jobs = [
                 dict(r) for r in rows
-                if title_matches(r["title"] or "", keywords=title_keywords if title_keywords else None)
-                and (r["match_score"] or 0) >= MATCH_THRESHOLD
+                if (r["match_score"] or 0) >= MATCH_THRESHOLD
             ]
             body = build_html(jobs).encode("utf-8")
             self._respond(200, "text/html; charset=utf-8", body)
-        elif self.path == "/get-cv":
-            config = load_config()
-            cv_text = config.get("cv_text", "")
-            response = json.dumps({"cv_text": cv_text}).encode()
-            self._respond(200, "application/json", response)
         elif self.path == "/status":
             rows = get_recent_jobs(days=self.days)
-            # Count includes all saved jobs so page reloads when any new job arrives
             body = json.dumps({
                 "processing": _state["processing"],
                 "count": len(rows),
             }).encode()
             self._respond(200, "application/json", body)
         elif self.path == "/settings":
-            config = load_config()
-            roles_text = "\n".join(config.get("roles", []))
-            locations_text = "\n".join(config.get("locations", []))
-            threshold = config.get("match_threshold", 0.75)
-            cv_chars = len(config.get("cv_text", ""))
-
-            html = f"""<!DOCTYPE html>
+            html = """<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -67,14 +52,17 @@ class DigestHandler(BaseHTTPRequestHandler):
         nav a.active {{ color: #2c3e50; border-bottom: 2px solid #3498db; }}
         section {{ margin-bottom: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; }}
         h2 {{ color: #2c3e50; font-size: 18px; margin-top: 0; }}
-        textarea, input[type="text"], input[type="number"] {{ width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; }}
+        textarea, input[type="text"], input[type="number"] {{ width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; box-sizing: border-box; }}
         input[type="number"] {{ font-family: inherit; }}
-        button {{ background: #3498db; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; margin: 10px 0; }}
+        .checkbox-group {{ margin: 10px 0; }}
+        .checkbox-group label {{ display: block; margin: 8px 0; }}
+        .checkbox-group input[type="checkbox"] {{ margin-right: 8px; }}
+        button {{ background: #3498db; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; margin: 10px 0; margin-right: 10px; }}
         button:hover {{ background: #2980b9; }}
         .hint {{ font-size: 14px; color: #666; margin-top: 8px; }}
-        #cv-status, #run-status {{ margin-top: 10px; padding: 10px; border-radius: 4px; }}
-        #cv-status.success {{ background: #d4edda; color: #155724; }}
-        #cv-status.error {{ background: #f8d7da; color: #721c24; }}
+        #status {{ margin-top: 10px; padding: 10px; border-radius: 4px; display: none; }}
+        #status.success {{ background: #d4edda; color: #155724; display: block; }}
+        #status.error {{ background: #f8d7da; color: #721c24; display: block; }}
     </style>
 </head>
 <body>
@@ -85,65 +73,98 @@ class DigestHandler(BaseHTTPRequestHandler):
 
     <h1>Job Agent Settings</h1>
 
-    <form action="/settings" method="POST">
-        <section>
-            <h2>Role Keywords</h2>
-            <textarea name="roles" rows="8">{roles_text}</textarea>
-            <p class="hint">One role per line. Used as search queries on all platforms.</p>
-        </section>
-
-        <section>
-            <h2>Locations</h2>
-            <textarea name="locations" rows="5">{locations_text}</textarea>
-            <p class="hint">One location per line. "Remote" is treated as a remote-only filter.</p>
-        </section>
-
-        <section>
-            <h2>Match Threshold</h2>
-            <input type="number" name="match_threshold" min="0" max="1" step="0.05" value="{threshold}">
-            <p class="hint">Minimum match score (0.0–1.0) to show a job. Default: 0.75</p>
-        </section>
-
-        <button type="submit">💾 Save Settings</button>
-    </form>
-
     <section>
-        <h2>CV / Resume</h2>
-        <form id="cv-form" enctype="multipart/form-data" style="display: contents;">
-            <div style="background: white; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
-                <p><strong>Upload PDF:</strong></p>
-                <input type="file" id="cv_file" name="cv_file" accept=".pdf" style="margin-bottom: 15px;">
-                <button type="button" onclick="uploadCV('file')" style="display: inline-block; margin-right: 10px;">📤 Upload PDF</button>
-                <p class="hint" style="margin-top: 5px;">Supported: PDF files</p>
-            </div>
-
-            <div style="background: white; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
-                <p><strong>Or paste plain text:</strong></p>
-                <textarea name="cv_text" id="cv_text" rows="10" placeholder="Paste your CV/resume here..."></textarea>
-                <button type="button" onclick="uploadCV('text')" style="display: inline-block;">📋 Upload Text</button>
-                <p class="hint" style="margin-top: 5px;">Plain text CV content</p>
-            </div>
-
-            <div id="cv-status"></div>
-            <p class="hint">Current CV: {cv_chars} characters</p>
-            <button type="button" onclick="showCurrentCV()" style="display: inline-block; margin-top: 10px; background: #6366f1;">👁️ Preview Current CV</button>
-            <button type="button" onclick="clearCV()" style="display: inline-block; margin-top: 10px; background: #ef4444;">❌ Clear CV</button>
-            <div id="cv-preview" style="margin-top: 15px; padding: 10px; background: #f3f4f6; border-radius: 4px; max-height: 200px; overflow-y: auto; display: none; white-space: pre-wrap; font-family: monospace; font-size: 12px;"></div>
-        </form>
+        <h2>Role Keywords</h2>
+        <textarea id="roles" rows="8" placeholder="Data Scientist&#10;Data Analyst&#10;Analytics Engineer"></textarea>
+        <p class="hint">One role per line. Used as search queries on all platforms.</p>
     </section>
 
     <section>
-        <h2>Start Search</h2>
-        <p>Trigger a new job search with current settings.</p>
+        <h2>Locations</h2>
+        <textarea id="locations" rows="5" placeholder="Germany&#10;Netherlands&#10;Remote"></textarea>
+        <p class="hint">One location per line.</p>
+    </section>
+
+    <section>
+        <h2>Match Threshold</h2>
+        <input type="number" id="match_threshold" min="0" max="1" step="0.05" value="0.75">
+        <p class="hint">Minimum match score (0.0–1.0) to show a job. Default: 0.75</p>
+    </section>
+
+    <section>
+        <h2>Job Boards</h2>
+        <p class="hint">Select which job boards to search:</p>
+        <div class="checkbox-group">
+            <label><input type="checkbox" id="scraper_linkedin" checked> LinkedIn</label>
+            <label><input type="checkbox" id="scraper_stepstone" checked> Stepstone</label>
+            <label><input type="checkbox" id="scraper_xing" checked> Xing</label>
+        </div>
+    </section>
+
+    <section>
+        <h2>CV / Resume</h2>
+        <p><strong>Upload PDF:</strong></p>
+        <input type="file" id="cv_file" accept=".pdf" style="margin-bottom: 15px;">
+        <button onclick="uploadCV('file')">📤 Upload PDF</button>
+        <p class="hint" style="margin-top: 5px;">Supported: PDF files</p>
+
+        <p style="margin-top: 20px;"><strong>Or paste plain text:</strong></p>
+        <textarea id="cv_text" rows="10" placeholder="Paste your CV/resume here..."></textarea>
+        <button onclick="uploadCV('text')">📋 Upload Text</button>
+        <p class="hint" style="margin-top: 5px;">Plain text CV content</p>
+
+        <div id="status"></div>
+        <button onclick="showCurrentCV()" style="background: #6366f1;">👁️ Preview CV</button>
+        <button onclick="clearCV()" style="background: #ef4444;">❌ Clear CV</button>
+        <div id="cv-preview" style="margin-top: 15px; padding: 10px; background: #f3f4f6; border-radius: 4px; max-height: 200px; overflow-y: auto; display: none; white-space: pre-wrap; font-family: monospace; font-size: 12px;"></div>
+    </section>
+
+    <section>
+        <h2>Actions</h2>
+        <button onclick="saveSettings()" style="background: #27ae60;">💾 Save Settings</button>
         <button onclick="startRun()" style="background: #27ae60;">🚀 Start Search</button>
-        <button onclick="clearDatabase()" style="background: #e74c3c; margin-left: 10px;">🗑️ Clear Old Jobs</button>
+        <button onclick="clearDatabase()" style="background: #e74c3c;">🗑️ Clear Old Jobs</button>
         <div id="run-status"></div>
     </section>
 
     <script>
+        const STORAGE_KEY = 'jobAgentConfig';
+
+        function loadSettings() {{
+            const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{{}}');
+            document.getElementById('roles').value = (config.roles || []).join('\\n');
+            document.getElementById('locations').value = (config.locations || []).join('\\n');
+            document.getElementById('cv_text').value = config.cv_text || '';
+            document.getElementById('match_threshold').value = config.match_threshold || 0.75;
+            ['linkedin', 'stepstone', 'xing'].forEach(s => {{
+                const checked = !config.enabled_scrapers || config.enabled_scrapers.includes(s);
+                document.getElementById('scraper_' + s).checked = checked;
+            }});
+        }}
+
+        function saveSettings() {{
+            const enabledScrapers = ['linkedin', 'stepstone', 'xing']
+                .filter(s => document.getElementById('scraper_' + s).checked);
+            const config = {{
+                roles: document.getElementById('roles').value.split('\\n').filter(r => r.trim()),
+                locations: document.getElementById('locations').value.split('\\n').filter(l => l.trim()),
+                cv_text: document.getElementById('cv_text').value,
+                match_threshold: parseFloat(document.getElementById('match_threshold').value) || 0.75,
+                enabled_scrapers: enabledScrapers,
+            }};
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+            showStatus('✅ Settings saved to browser cache', 'success');
+        }}
+
+        function showStatus(msg, cls) {{
+            const status = document.getElementById('status');
+            status.textContent = msg;
+            status.className = cls;
+        }}
+
         async function uploadCV(mode) {{
             const formData = new FormData();
-            let payload = {{}};
+            let cvText = null;
 
             if (mode === 'file') {{
                 const file = document.getElementById('cv_file').files[0];
@@ -153,34 +174,47 @@ class DigestHandler(BaseHTTPRequestHandler):
                 }}
                 formData.append('cv_file', file);
             }} else {{
-                const text = document.getElementById('cv_text').value;
-                if (!text.trim()) {{
+                cvText = document.getElementById('cv_text').value;
+                if (!cvText.trim()) {{
                     alert('Please paste some CV text');
                     return;
                 }}
-                formData.append('cv_text', text);
+                formData.append('cv_text', cvText);
             }}
 
             try {{
                 const r = await fetch('/upload-cv', {{ method: 'POST', body: formData }});
                 const data = await r.json();
-                const status = document.getElementById('cv-status');
                 if (data.ok) {{
-                    status.textContent = '✅ CV saved (' + data.chars + ' characters)';
-                    status.className = 'success';
+                    const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{{}}');
+                    config.cv_text = data.cv_text;
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+                    document.getElementById('cv_text').value = data.cv_text;
+                    showStatus('✅ CV saved (' + data.cv_text.length + ' characters)', 'success');
                 }} else {{
-                    status.textContent = '❌ Error: ' + (data.error || 'Unknown error');
-                    status.className = 'error';
+                    showStatus('❌ Error: ' + (data.error || 'Unknown error'), 'error');
                 }}
             }} catch (e) {{
-                document.getElementById('cv-status').textContent = '❌ Error: ' + e.message;
-                document.getElementById('cv-status').className = 'error';
+                showStatus('❌ Error: ' + e.message, 'error');
             }}
         }}
 
         async function startRun() {{
+            const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{{}}');
+            if (!config.roles || config.roles.length === 0) {{
+                alert('Please add at least one role keyword before starting search');
+                return;
+            }}
+            if (!config.locations || config.locations.length === 0) {{
+                alert('Please add at least one location before starting search');
+                return;
+            }}
             try {{
-                const r = await fetch('/run', {{ method: 'POST' }});
+                const r = await fetch('/run', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify(config),
+                }});
                 const data = await r.json();
                 const status = document.getElementById('run-status');
                 if (data.ok) {{
@@ -212,22 +246,18 @@ class DigestHandler(BaseHTTPRequestHandler):
         }}
 
         async function showCurrentCV() {{
-            try {{
-                const r = await fetch('/get-cv');
-                const data = await r.json();
-                const preview = document.getElementById('cv-preview');
-                if (data.cv_text) {{
-                    preview.textContent = data.cv_text.substring(0, 1000);
-                    if (data.cv_text.length > 1000) {{
-                        preview.textContent += '\\n\\n... (' + (data.cv_text.length - 1000) + ' more characters)';
-                    }}
-                    preview.style.display = 'block';
-                }} else {{
-                    preview.textContent = 'No CV loaded';
-                    preview.style.display = 'block';
+            const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{{}}');
+            const preview = document.getElementById('cv-preview');
+            const cvText = config.cv_text || '';
+            if (cvText) {{
+                preview.textContent = cvText.substring(0, 1000);
+                if (cvText.length > 1000) {{
+                    preview.textContent += '\\n\\n... (' + (cvText.length - 1000) + ' more characters)';
                 }}
-            }} catch (e) {{
-                alert('Error: ' + e.message);
+                preview.style.display = 'block';
+            }} else {{
+                preview.textContent = 'No CV loaded';
+                preview.style.display = 'block';
             }}
         }}
 
@@ -236,23 +266,18 @@ class DigestHandler(BaseHTTPRequestHandler):
                 return;
             }}
             try {{
-                const r = await fetch('/clear-cv', {{ method: 'POST' }});
-                const data = await r.json();
-                const status = document.getElementById('cv-status');
-                if (data.ok) {{
-                    status.textContent = '✅ CV cleared. Upload a new one.';
-                    status.className = 'success';
-                    document.getElementById('cv-preview').style.display = 'none';
-                    location.reload();
-                }} else {{
-                    status.textContent = '❌ Error: ' + (data.error || 'Could not clear CV');
-                    status.className = 'error';
-                }}
+                const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{{}}');
+                config.cv_text = '';
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+                document.getElementById('cv_text').value = '';
+                showStatus('✅ CV cleared. Upload a new one.', 'success');
+                document.getElementById('cv-preview').style.display = 'none';
             }} catch (e) {{
-                document.getElementById('cv-status').textContent = '❌ Error: ' + e.message;
-                document.getElementById('cv-status').className = 'error';
+                showStatus('❌ Error: ' + e.message, 'error');
             }}
         }}
+
+        window.addEventListener('load', loadSettings);
     </script>
 </body>
 </html>"""
@@ -267,50 +292,19 @@ class DigestHandler(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(length))
             mark_applied(data.get("id", ""), data.get("applied", True))
             self._respond(200, "application/json", b'{"ok":true}')
-        elif self.path == "/settings":
-            length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(length).decode("utf-8")
-            params = parse_qs(body)
-
-            config = load_config()
-            # Preserve existing cv_text and other fields
-            existing_cv_text = config.get("cv_text", "")
-
-            config["roles"] = [r.strip() for r in params.get("roles", [""])[0].split("\n") if r.strip()]
-            config["locations"] = [l.strip() for l in params.get("locations", [""])[0].split("\n") if l.strip()]
-
-            try:
-                config["match_threshold"] = float(params.get("match_threshold", ["0.75"])[0])
-            except (ValueError, IndexError):
-                config["match_threshold"] = 0.75
-
-            # Safeguard: restore cv_text if it was lost
-            if not config.get("cv_text") and existing_cv_text:
-                config["cv_text"] = existing_cv_text
-
-            save_config(config)
-
-            # Redirect to /settings (HTTP 303)
-            self.send_response(303)
-            self.send_header("Location", "/settings")
-            self.end_headers()
         elif self.path == "/upload-cv":
             content_type = self.headers.get("Content-Type", "")
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length)
 
             try:
-                config = load_config()
-
                 if "multipart/form-data" in content_type:
-                    # Parse multipart form data
                     boundary = content_type.split("boundary=")[1].split(";")[0].encode()
                     parts = body.split(b"--" + boundary)
 
                     cv_text = ""
                     for part in parts:
                         if b"filename=" in part:
-                            # PDF file upload
                             if b".pdf" in part.lower():
                                 start = part.find(b"\r\n\r\n") + 4
                                 end = part.rfind(b"\r\n")
@@ -320,15 +314,12 @@ class DigestHandler(BaseHTTPRequestHandler):
                                 except Exception as e:
                                     raise ValueError(f"PDF parse error: {e}")
                         elif b'name="cv_text"' in part:
-                            # Text field
                             start = part.find(b"\r\n\r\n") + 4
                             end = part.rfind(b"\r\n")
                             cv_text = part[start:end].decode("utf-8")
 
                     if cv_text:
-                        config["cv_text"] = cv_text
-                        save_config(config)
-                        response = json.dumps({"ok": True, "chars": len(cv_text)}).encode()
+                        response = json.dumps({"ok": True, "cv_text": cv_text}).encode()
                     else:
                         response = json.dumps({"ok": False, "error": "No CV data found"}).encode()
                 else:
@@ -343,11 +334,12 @@ class DigestHandler(BaseHTTPRequestHandler):
                 response = json.dumps({"ok": False, "error": "Search already running"}).encode()
                 self._respond(200, "application/json", response)
             else:
-                # Start run in background thread
+                length = int(self.headers.get("Content-Length", 0))
+                config = json.loads(self.rfile.read(length)) if length else {}
+                print(f"[Server /run] Received config: roles={config.get('roles', [])}, cv_text_len={len(config.get('cv_text', ''))}, scrapers={config.get('enabled_scrapers', [])}")
+
                 def run_pipeline_bg():
                     from main import run_pipeline
-                    config = load_config()
-                    print(f"[Server /run] Loaded config: cv_text_len={len(config.get('cv_text', ''))}")
                     _state["processing"] = True
                     try:
                         asyncio.run(run_pipeline(config, test_mode=False, start_server=False))
@@ -371,16 +363,6 @@ class DigestHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 response = json.dumps({"ok": False, "error": str(e)}).encode()
                 self._respond(400, "application/json", response)
-        elif self.path == "/clear-cv":
-            try:
-                config = load_config()
-                config["cv_text"] = ""
-                save_config(config)
-                response = json.dumps({"ok": True}).encode()
-                self._respond(200, "application/json", response)
-            except Exception as e:
-                response = json.dumps({"ok": False, "error": str(e)}).encode()
-                self._respond(400, "application/json", response)
         else:
             self._respond(404, "text/plain", b"Not found")
 
@@ -392,7 +374,7 @@ class DigestHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, format, *args):
-        pass  # suppress request logs
+        pass
 
 
 def _make_server(days, port):

@@ -6,26 +6,12 @@ from typing import Dict, List
 CONFIG_FILE = Path(__file__).parent.parent / "data" / "user_config.json"
 
 DEFAULT_CONFIG = {
-    "roles": [
-        "Data Scientist",
-        "Data Analyst",
-        "Analytics Engineer",
-        "ML Engineer",
-        "Machine Learning Engineer",
-        "Business Intelligence Analyst",
-        "Data Engineer",
-    ],
-    "locations": [
-        "Düsseldorf",
-        "Cologne",
-        "Neuss",
-        "NRW",
-        "North Rhine-Westphalia",
-        "remote",
-    ],
+    "roles": [],
+    "locations": [],
     "remote_ok": True,
     "cv_text": "",
     "match_threshold": 0.75,
+    "enabled_scrapers": ["linkedin", "stepstone", "xing"],
 }
 
 
