@@ -95,7 +95,13 @@ def _extract_domain_keywords(cv_text: str) -> str:
     return ", ".join(sorted(keywords))
 
 
-def score_job(job: Dict, threshold: float = 0.60, cv_text: str = None, target_roles: list = None) -> Tuple[float, Dict]:
+def score_job(
+    job: Dict,
+    threshold: float = 0.60,
+    cv_text: str = None,
+    target_roles: list = None,
+    target_description_keywords: list = None,
+) -> Tuple[float, Dict]:
     """
     Score how well a candidate's resume matches a job description.
     Returns (score, details_dict).
@@ -105,6 +111,7 @@ def score_job(job: Dict, threshold: float = 0.60, cv_text: str = None, target_ro
         threshold: (unused, kept for compatibility)
         cv_text: if provided, use this CV text; otherwise fall back to hardcoded EN/DE resume
         target_roles: list of target job roles (e.g., ["Data Scientist", "Data Analyst"]) to guide scoring
+        target_description_keywords: list of domain/industry keywords expected in the job description
     """
     description = job.get("description", "")
     if not description or len(description) < 50:
@@ -130,6 +137,11 @@ def score_job(job: Dict, threshold: float = 0.60, cv_text: str = None, target_ro
     else:
         target_roles_str = "data science, analytics, machine learning, engineering roles"
 
+    if target_description_keywords and len(target_description_keywords) > 0:
+        target_keywords_str = ", ".join(target_description_keywords)
+    else:
+        target_keywords_str = "not specified"
+
     prompt = f"""You are a senior recruiter evaluating a candidate's fit for a job opportunity.
 
 Analyze the match between this candidate's resume and the job description.
@@ -140,6 +152,7 @@ CANDIDATE RESUME:
 CANDIDATE'S DOMAIN EXPERTISE: {domain_keywords}
 
 TARGET ROLES: {target_roles_str}
+TARGET DESCRIPTION KEYWORDS: {target_keywords_str}
 
 JOB TITLE: {job.get('title', 'N/A')}
 COMPANY: {job.get('company', 'N/A')}
@@ -167,9 +180,10 @@ Scoring guide:
 
 EVALUATION CRITERIA:
 1. Role alignment: Does the job fit the candidate's target roles ({target_roles_str})?
-2. Skills match: Are the core technical and soft skills required present in the resume?
-3. Industry/domain fit: Does the candidate's expertise align with the job domain?
-4. Experience level: Is the candidate's seniority and background appropriate?
+2. Description keyword/domain alignment: Does the job description fit these target keywords or phrases ({target_keywords_str})?
+3. Skills match: Are the core technical and soft skills required present in the resume?
+4. Industry/domain fit: Does the candidate's expertise align with the job domain?
+5. Experience level: Is the candidate's seniority and background appropriate?
 
 Be generous with scoring for jobs that match the target roles and contain relevant technical skills — the candidate is actively seeking these roles.
 Prioritize skills match and role alignment. Do not be overly strict about having every single skill mentioned.

@@ -7,6 +7,7 @@ CONFIG_FILE = Path(__file__).parent.parent / "data" / "user_config.json"
 
 DEFAULT_CONFIG = {
     "roles": [],
+    "description_keywords": [],
     "locations": [],
     "remote_ok": True,
     "cv_text": "",

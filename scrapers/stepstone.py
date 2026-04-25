@@ -1,21 +1,10 @@
 """
 stepstone.py — Stepstone.de job scraper via Playwright
-One of Germany's largest job boards, strong in NRW and remote roles.
 """
 import asyncio
 import hashlib
 from typing import List, Dict
 
-
-SEARCH_QUERIES = [
-    {"q": "Data Scientist", "where": "Düsseldorf"},
-    {"q": "Data Analyst", "where": "Düsseldorf"},
-    {"q": "Data Engineer", "where": "Nordrhein-Westfalen"},
-    {"q": "Machine Learning Engineer", "where": "Nordrhein-Westfalen"},
-    {"q": "Analytics Engineer", "where": "Nordrhein-Westfalen"},
-    {"q": "Data Scientist", "where": "Deutschland"},
-    {"q": "Data Analyst", "where": "Deutschland"},
-]
 
 BASE_URL = "https://www.stepstone.de/jobs/"
 
@@ -26,27 +15,28 @@ def make_job_id(url: str) -> str:
 
 async def scrape_stepstone(max_jobs: int = 20, on_job=None, roles: List[str] = None, locations: List[str] = None) -> List[Dict]:
     """
-    Scrapes Stepstone.de for data science/analytics jobs.
+    Scrapes Stepstone.de for jobs.
     Returns list of job dicts.
 
     Args:
         max_jobs: maximum jobs to return
         on_job: callback function called when a job is found
-        roles: optional list of role keywords; uses SEARCH_QUERIES default if not provided
-        locations: optional list of locations; uses SEARCH_QUERIES default if not provided
+        roles: list of role keywords (required)
+        locations: list of locations (required)
     """
+    if not roles or not locations:
+        print("[Stepstone] Roles and locations are required. Configure them in the settings.")
+        return []
+
     try:
         from playwright.async_api import async_playwright
     except ImportError:
         print("[Stepstone] playwright not installed.")
         return []
 
-    # Build queries from roles/locations if provided, otherwise use defaults
-    if roles and locations:
-        from core.user_config import build_scraper_queries
-        queries = build_scraper_queries(roles, locations, key_role="q", key_loc="where")
-    else:
-        queries = SEARCH_QUERIES
+    # Build queries from user-provided roles and locations
+    from core.user_config import build_scraper_queries
+    queries = build_scraper_queries(roles, locations, key_role="q", key_loc="where")
 
     jobs = []
 

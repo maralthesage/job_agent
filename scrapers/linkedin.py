@@ -8,15 +8,6 @@ import re
 from typing import List, Dict
 
 
-SEARCH_QUERIES = [
-    {"keywords": "Data Scientist", "location": "Düsseldorf, NRW"},
-    {"keywords": "Data Analyst", "location": "Düsseldorf, NRW"},
-    {"keywords": "Analytics Engineer", "location": "Düsseldorf, NRW"},
-    {"keywords": "ML Engineer", "location": "Düsseldorf, NRW"},
-    {"keywords": "Data Scientist", "location": "Germany"},   # remote filter below
-    {"keywords": "Data Analyst", "location": "Germany"},
-]
-
 BASE_URL = "https://www.linkedin.com/jobs/search"
 
 
@@ -32,21 +23,22 @@ async def scrape_linkedin(max_jobs: int = 20, on_job=None, roles: List[str] = No
     Args:
         max_jobs: maximum jobs to return
         on_job: callback function called when a job is found
-        roles: optional list of role keywords; uses SEARCH_QUERIES default if not provided
-        locations: optional list of locations; uses SEARCH_QUERIES default if not provided
+        roles: list of role keywords (required)
+        locations: list of locations (required)
     """
+    if not roles or not locations:
+        print("[LinkedIn] Roles and locations are required. Configure them in the settings.")
+        return []
+
     try:
         from playwright.async_api import async_playwright
     except ImportError:
         print("[LinkedIn] playwright not installed. Run: pip install playwright && playwright install chromium")
         return []
 
-    # Build queries from roles/locations if provided, otherwise use defaults
-    if roles and locations:
-        from core.user_config import build_scraper_queries
-        queries = build_scraper_queries(roles, locations, key_role="keywords", key_loc="location")
-    else:
-        queries = SEARCH_QUERIES
+    # Build queries from user-provided roles and locations
+    from core.user_config import build_scraper_queries
+    queries = build_scraper_queries(roles, locations, key_role="keywords", key_loc="location")
 
     jobs = []
 

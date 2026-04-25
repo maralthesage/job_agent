@@ -4,9 +4,9 @@ main.py — Job Agent entry point
 Orchestrates: scrape → deduplicate → score → html digest
 
 Usage:
-  python main.py              # full run
-  python main.py --test       # run with mock data (no real scraping)
-  python main.py --from-db    # view saved jobs without re-scraping
+  python main.py              # start in digest/settings mode (no auto-scraping)
+  python main.py --test       # run with mock data (for testing)
+  python main.py --run        # immediately run scrape with loaded config
 """
 import asyncio
 import argparse
@@ -14,9 +14,8 @@ import time
 from datetime import datetime
 
 from core.db import init_db, is_seen, mark_seen, update_job_score, log_digest
-from core.agent import score_job
 from core.server import serve_digest, start_server_thread, set_done
-from core.filters import title_matches, MATCH_THRESHOLD
+from core.filters import description_matches, title_matches, MATCH_THRESHOLD
 from core.user_config import load_config
 
 
@@ -31,8 +30,14 @@ def log(msg: str):
 
 # ── Scrapers ─────────────────────────────────────────────────────────────────
 async def run_scrapers(on_job=None, roles=None, locations=None, enabled_scrapers=None) -> list:
+    from scrapers.built_in import scrape_built_in
+    from scrapers.flexjobs import scrape_flexjobs
+    from scrapers.glassdoor import scrape_glassdoor
+    from scrapers.indeed import scrape_indeed
     from scrapers.linkedin import scrape_linkedin
+    from scrapers.monster import scrape_monster
     from scrapers.stepstone import scrape_stepstone
+    from scrapers.weworkremotely import scrape_weworkremotely
     from scrapers.xing import scrape_xing
 
     log("Starting scrapers...")
@@ -40,12 +45,12 @@ async def run_scrapers(on_job=None, roles=None, locations=None, enabled_scrapers
         "linkedin": (scrape_linkedin, "LinkedIn"),
         "stepstone": (scrape_stepstone, "Stepstone"),
         "xing": (scrape_xing, "Xing"),
-        "indeed": (None, "Indeed"),
-        "glassdoor": (None, "Glassdoor"),
-        "monster": (None, "Monster"),
-        "buildin": (None, "Built In"),
-        "flexjobs": (None, "FlexJobs"),
-        "weworkremotely": (None, "We Work Remotely"),
+        "indeed": (scrape_indeed, "Indeed"),
+        "glassdoor": (scrape_glassdoor, "Glassdoor"),
+        "monster": (scrape_monster, "Monster"),
+        "buildin": (scrape_built_in, "Built In"),
+        "flexjobs": (scrape_flexjobs, "FlexJobs"),
+        "weworkremotely": (scrape_weworkremotely, "We Work Remotely"),
     }
 
     active = enabled_scrapers if enabled_scrapers else ["linkedin", "stepstone", "xing"]
@@ -53,17 +58,25 @@ async def run_scrapers(on_job=None, roles=None, locations=None, enabled_scrapers
     for scraper_name in active:
         if scraper_name in scrapers_map:
             scraper_fn, label = scrapers_map[scraper_name]
-            if scraper_fn is None:
-                log(f"[{label}] scraper not yet implemented (skipping)")
-            else:
-                tasks[scraper_name] = (scraper_fn(MAX_JOBS_PER_SOURCE, on_job=on_job, roles=roles, locations=locations), label)
+            tasks[scraper_name] = (scraper_fn, label)
 
     if not tasks:
         log("No active scrapers available")
         return []
 
+    semaphore = asyncio.Semaphore(3)
+
+    async def run_one(scraper_fn):
+        async with semaphore:
+            return await scraper_fn(
+                MAX_JOBS_PER_SOURCE,
+                on_job=on_job,
+                roles=roles,
+                locations=locations,
+            )
+
     results = await asyncio.gather(
-        *[task[0] for task in tasks.values()],
+        *[run_one(task[0]) for task in tasks.values()],
         return_exceptions=True
     )
 
@@ -84,32 +97,21 @@ def mock_jobs() -> list:
     return [
         {
             "id": "test_001",
-            "source": "linkedin",
-            "title": "Data Scientist",
-            "company": "Test GmbH",
-            "location": "Düsseldorf, Germany",
-            "url": "https://linkedin.com/jobs/test",
-            "description": (
-                "We are looking for a Data Scientist with experience in Python, "
-                "XGBoost, LightGBM, and data pipelines. Experience with PySpark, "
-                "ETL, and Streamlit dashboards is a plus. You will develop ML models "
-                "for demand forecasting and build scalable data solutions. "
-                "German B2 level preferred."
-            ),
+            "source": "test_source",
+            "title": "Test Role 1",
+            "company": "Test Company 1",
+            "location": "Test Location",
+            "url": "https://example.com/test1",
+            "description": "This is a test job description for testing purposes.",
         },
         {
             "id": "test_002",
-            "source": "indeed",
-            "title": "Senior Data Analyst",
-            "company": "Analytics Corp",
-            "location": "Remote (Germany)",
-            "url": "https://indeed.de/jobs/test2",
-            "description": (
-                "Senior Data Analyst role. Requirements: SQL, Python, Tableau or "
-                "Power BI, statistical analysis. Nice to have: machine learning "
-                "experience, LangChain, RAG systems, stakeholder management. "
-                "English C1 required."
-            ),
+            "source": "test_source",
+            "title": "Test Role 2",
+            "company": "Test Company 2",
+            "location": "Test Location 2",
+            "url": "https://example.com/test2",
+            "description": "Another test job description for testing the pipeline.",
         },
     ]
 
@@ -120,7 +122,7 @@ async def run_pipeline(config: dict, test_mode: bool = False, start_server: bool
     Core job agent pipeline.
 
     Args:
-        config: user config dict with roles, locations, cv_text, match_threshold
+        config: user config dict with roles, description_keywords, locations, cv_text, match_threshold
         test_mode: if True, use mock jobs instead of scraping
         start_server: if True, start the HTTP server (set False when called from dashboard)
     """
@@ -130,15 +132,23 @@ async def run_pipeline(config: dict, test_mode: bool = False, start_server: bool
 
     init_db()
 
-    roles = config.get("roles", [])
-    locations = config.get("locations", [])
+    roles = [str(role).strip() for role in config.get("roles", []) if str(role).strip()]
+    description_keywords = [
+        str(keyword).strip()
+        for keyword in config.get("description_keywords", [])
+        if str(keyword).strip()
+    ]
+    locations = [str(location).strip() for location in config.get("locations", []) if str(location).strip()]
     cv_text = config.get("cv_text", "")
     match_threshold = config.get("match_threshold", MATCH_THRESHOLD)
     enabled_scrapers = config.get("enabled_scrapers", ["linkedin", "stepstone", "xing"])
     title_keywords = [kw.lower() for kw in roles]
 
     # DEBUG: Log what we loaded
-    log(f"Loaded config: roles={roles}, cv_text_len={len(cv_text) if cv_text else 0}, threshold={match_threshold}")
+    log(
+        f"Loaded config: roles={roles}, description_keywords={description_keywords}, "
+        f"cv_text_len={len(cv_text) if cv_text else 0}, threshold={match_threshold}"
+    )
 
     # Step 1: Start live digest server (unless already running from dashboard)
     httpd = None
@@ -168,15 +178,34 @@ async def run_pipeline(config: dict, test_mode: bool = False, start_server: bool
         log_digest(0, "no_new_jobs")
         set_done()
     else:
-        # Step 3: Score only jobs with relevant titles (skip LLM call for irrelevant ones)
-        to_score = [j for j in newly_scraped if title_matches(j.get("title", ""), keywords=title_keywords if title_keywords else None)]
-        skipped = len(newly_scraped) - len(to_score)
-        if skipped:
-            log(f"Skipping {skipped} jobs with non-matching titles")
+        # Step 3: Score only jobs with relevant titles and description keywords
+        title_matched = [
+            j for j in newly_scraped
+            if title_matches(j.get("title", ""), keywords=title_keywords if title_keywords else None)
+        ]
+        skipped_titles = len(newly_scraped) - len(title_matched)
+        if skipped_titles:
+            log(f"Skipping {skipped_titles} jobs with non-matching titles")
+
+        to_score = [
+            j for j in title_matched
+            if description_matches(j.get("description", ""), keywords=description_keywords)
+        ]
+        skipped_descriptions = len(title_matched) - len(to_score)
+        if skipped_descriptions:
+            log(f"Skipping {skipped_descriptions} jobs without required description keywords")
+
+        from core.agent import score_job
 
         for i, job in enumerate(to_score):
             log(f"Scoring [{i+1}/{len(to_score)}]: {job['title']} @ {job['company']}")
-            score, details = score_job(job, threshold=match_threshold, cv_text=cv_text if cv_text else None, target_roles=roles)
+            score, details = score_job(
+                job,
+                threshold=match_threshold,
+                cv_text=cv_text if cv_text else None,
+                target_roles=roles,
+                target_description_keywords=description_keywords,
+            )
             job["match_score"] = score
             update_job_score(job["id"], score)  # page auto-refreshes with new score
             log(f"  → {int(score*100)}% — {details.get('reason', '')}")
@@ -216,11 +245,12 @@ def run_from_db(days: int = 30):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Job Agent")
     parser.add_argument("--test", action="store_true", help="Use mock jobs (no real scraping)")
-    parser.add_argument("--from-db", action="store_true", help="Show saved jobs from DB as HTML digest")
-    parser.add_argument("--days", type=int, default=30, help="How many days back to show (with --from-db)")
+    parser.add_argument("--run", action="store_true", help="Immediately run scrape with loaded config (not recommended)")
+    parser.add_argument("--days", type=int, default=30, help="How many days back to show")
     args = parser.parse_args()
 
-    if args.from_db:
-        run_from_db(days=args.days)
-    else:
+    if args.run:
         asyncio.run(run(test_mode=args.test))
+    else:
+        # Default: start in settings/digest mode, scraping only happens when user clicks "Start Search"
+        run_from_db(days=args.days)

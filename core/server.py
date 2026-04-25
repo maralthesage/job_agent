@@ -43,6 +43,20 @@ class DigestHandler(BaseHTTPRequestHandler):
                 "count": len(rows),
             }).encode()
             self._respond(200, "application/json", body)
+        elif self.path == "/test":
+            html = """<!DOCTYPE html>
+<html>
+<head><title>Button Test</title></head>
+<body>
+<h1>Simple Button Test</h1>
+<button onclick="alert('Button clicked!')">Click Me</button>
+<script>
+console.log('Script loaded');
+</script>
+</body>
+</html>"""
+            body = html.encode("utf-8")
+            self._respond(200, "text/html; charset=utf-8", body)
         elif self.path == "/settings":
             html = """<!DOCTYPE html>
 <html>
@@ -82,8 +96,14 @@ class DigestHandler(BaseHTTPRequestHandler):
 
     <section>
         <h2>Role Keywords</h2>
-        <textarea id="roles" rows="8" placeholder="Data Scientist&#10;Data Analyst&#10;Analytics Engineer"></textarea>
-        <p class="hint">One role per line. Used as search queries on all platforms.</p>
+        <textarea id="roles" rows="8" placeholder="Senior Engineer&#10;Team Lead&#10;Product Manager"></textarea>
+        <p class="hint">One role/title per line. Used as search queries on all job boards.</p>
+    </section>
+
+    <section>
+        <h2>Job Description Keywords</h2>
+        <textarea id="description_keywords" rows="6" placeholder="required skills&#10;technologies&#10;experience level"></textarea>
+        <p class="hint">Optional. One keyword or phrase per line. If provided, at least one must appear in the job description to match.</p>
     </section>
 
     <section>
@@ -145,8 +165,9 @@ class DigestHandler(BaseHTTPRequestHandler):
 
         function loadSettings() {
             const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-            document.getElementById('roles').value = (config.roles || []).join('\n');
-            document.getElementById('locations').value = (config.locations || []).join('\n');
+            document.getElementById('roles').value = (config.roles || []).join('\\n');
+            document.getElementById('description_keywords').value = (config.description_keywords || []).join('\\n');
+            document.getElementById('locations').value = (config.locations || []).join('\\n');
             document.getElementById('cv_text').value = config.cv_text || '';
             document.getElementById('match_threshold').value = config.match_threshold || 0.75;
             const defaultScrapers = ['linkedin', 'indeed', 'glassdoor', 'stepstone', 'xing'];
@@ -160,13 +181,15 @@ class DigestHandler(BaseHTTPRequestHandler):
         function saveSettings() {
             const allScrapers = ['linkedin', 'indeed', 'glassdoor', 'stepstone', 'xing', 'monster', 'buildin', 'flexjobs', 'weworkremotely'];
             const enabledScrapers = allScrapers.filter(s => document.getElementById('scraper_' + s).checked);
-            const roles = document.getElementById('roles').value.split('\n').filter(r => r.trim());
-            const locations = document.getElementById('locations').value.split('\n').filter(l => l.trim());
+            const roles = document.getElementById('roles').value.split('\\n').map(r => r.trim()).filter(Boolean);
+            const descriptionKeywords = document.getElementById('description_keywords').value.split('\\n').map(k => k.trim()).filter(Boolean);
+            const locations = document.getElementById('locations').value.split('\\n').map(l => l.trim()).filter(Boolean);
             const cvLength = document.getElementById('cv_text').value.length;
             const threshold = parseFloat(document.getElementById('match_threshold').value) || 0.75;
 
             const config = {
                 roles: roles,
+                description_keywords: descriptionKeywords,
                 locations: locations,
                 cv_text: document.getElementById('cv_text').value,
                 match_threshold: threshold,
@@ -174,7 +197,7 @@ class DigestHandler(BaseHTTPRequestHandler):
             };
 
             localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-            const details = roles.length + ' role(s), ' + locations.length + ' location(s), ' + enabledScrapers.length + ' board(s), threshold: ' + Math.round(threshold * 100) + '%';
+            const details = roles.length + ' title(s), ' + descriptionKeywords.length + ' description keyword(s), ' + locations.length + ' location(s), ' + enabledScrapers.length + ' board(s), threshold: ' + Math.round(threshold * 100) + '%';
             showStatus('✅ SUCCESS! Settings saved to browser cache (' + details + ')', 'success');
             console.log('[saveSettings] Settings saved:', config);
         }
@@ -202,7 +225,6 @@ class DigestHandler(BaseHTTPRequestHandler):
                 const file = document.getElementById('cv_file').files[0];
                 if (!file) {
                     showStatus('❌ ERROR: No file selected. Please choose a PDF file.', 'error');
-                    console.warn('[uploadCV] No file selected');
                     return;
                 }
                 fileName = file.name;
@@ -225,13 +247,13 @@ class DigestHandler(BaseHTTPRequestHandler):
                 console.log('[uploadCV] Sending POST to /upload-cv');
                 const r = await fetch('/upload-cv', { method: 'POST', body: formData });
                 console.log('[uploadCV] Response received, status:', r.status);
+                const data = await r.json().catch(() => ({}));
 
                 if (!r.ok) {
-                    showStatus('❌ ERROR: Server returned status ' + r.status, 'error');
+                    showStatus('❌ ERROR: ' + (data.error || 'Server returned status ' + r.status), 'error');
                     return;
                 }
 
-                const data = await r.json();
                 console.log('[uploadCV] Response data:', data);
 
                 if (data.ok && data.cv_text) {
@@ -256,8 +278,9 @@ class DigestHandler(BaseHTTPRequestHandler):
 
         async function startRun() {
             const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            const descriptionKeywords = config.description_keywords || [];
             if (!config.roles || config.roles.length === 0) {
-                showStatus('❌ VALIDATION ERROR: Please add at least one role keyword in the "Role Keywords" section', 'error', 'run-status');
+                showStatus('❌ VALIDATION ERROR: Please add at least one job title in the "Alternative Job Titles" section', 'error', 'run-status');
                 console.warn('[startRun] Validation failed: no roles');
                 return;
             }
@@ -273,8 +296,8 @@ class DigestHandler(BaseHTTPRequestHandler):
                 return;
             }
             try {
-                showStatus('⏳ STARTING SEARCH: Searching ' + scrapers.length + ' board(s) for ' + config.roles.length + ' role(s)... Please wait (this may take a minute)', 'info', 'run-status');
-                console.log('[startRun] Starting search with config:', { roles: config.roles.length, locations: config.locations.length, scrapers: scrapers.length });
+                showStatus('⏳ STARTING SEARCH: Searching ' + scrapers.length + ' board(s) for ' + config.roles.length + ' title(s) and ' + descriptionKeywords.length + ' description keyword(s)... Please wait (this may take a minute)', 'info', 'run-status');
+                console.log('[startRun] Starting search with config:', { roles: config.roles.length, description_keywords: descriptionKeywords.length, locations: config.locations.length, scrapers: scrapers.length });
                 const r = await fetch('/run', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -327,7 +350,7 @@ class DigestHandler(BaseHTTPRequestHandler):
             if (cvText && cvText.length > 0) {
                 preview.textContent = cvText.substring(0, 1500);
                 if (cvText.length > 1500) {
-                    preview.textContent += '\n\n... (' + (cvText.length - 1500) + ' more characters)';
+                    preview.textContent += '\\n\\n... (' + (cvText.length - 1500) + ' more characters)';
                 }
                 preview.style.display = 'block';
                 showStatus('✅ CV Preview (' + cvText.length + ' characters total)', 'success');
@@ -424,7 +447,7 @@ class DigestHandler(BaseHTTPRequestHandler):
             else:
                 length = int(self.headers.get("Content-Length", 0))
                 config = json.loads(self.rfile.read(length)) if length else {}
-                print(f"[Server /run] Received config: roles={config.get('roles', [])}, cv_text_len={len(config.get('cv_text', ''))}, scrapers={config.get('enabled_scrapers', [])}")
+                print(f"[Server /run] Received config: roles={config.get('roles', [])}, description_keywords={config.get('description_keywords', [])}, cv_text_len={len(config.get('cv_text', ''))}, scrapers={config.get('enabled_scrapers', [])}")
 
                 def run_pipeline_bg():
                     from main import run_pipeline
