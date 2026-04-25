@@ -40,17 +40,26 @@ async def run_scrapers(on_job=None, roles=None, locations=None, enabled_scrapers
         "linkedin": (scrape_linkedin, "LinkedIn"),
         "stepstone": (scrape_stepstone, "Stepstone"),
         "xing": (scrape_xing, "Xing"),
+        "indeed": (None, "Indeed"),
+        "glassdoor": (None, "Glassdoor"),
+        "monster": (None, "Monster"),
+        "buildin": (None, "Built In"),
+        "flexjobs": (None, "FlexJobs"),
+        "weworkremotely": (None, "We Work Remotely"),
     }
 
-    active = enabled_scrapers if enabled_scrapers else list(scrapers_map.keys())
+    active = enabled_scrapers if enabled_scrapers else ["linkedin", "stepstone", "xing"]
     tasks = {}
     for scraper_name in active:
         if scraper_name in scrapers_map:
             scraper_fn, label = scrapers_map[scraper_name]
-            tasks[scraper_name] = (scraper_fn(MAX_JOBS_PER_SOURCE, on_job=on_job, roles=roles, locations=locations), label)
+            if scraper_fn is None:
+                log(f"[{label}] scraper not yet implemented (skipping)")
+            else:
+                tasks[scraper_name] = (scraper_fn(MAX_JOBS_PER_SOURCE, on_job=on_job, roles=roles, locations=locations), label)
 
     if not tasks:
-        log("No active scrapers selected")
+        log("No active scrapers available")
         return []
 
     results = await asyncio.gather(

@@ -96,8 +96,14 @@ class DigestHandler(BaseHTTPRequestHandler):
         <p class="hint">Select which job boards to search:</p>
         <div class="checkbox-group">
             <label><input type="checkbox" id="scraper_linkedin" checked> LinkedIn</label>
+            <label><input type="checkbox" id="scraper_indeed" checked> Indeed</label>
+            <label><input type="checkbox" id="scraper_glassdoor" checked> Glassdoor</label>
             <label><input type="checkbox" id="scraper_stepstone" checked> Stepstone</label>
             <label><input type="checkbox" id="scraper_xing" checked> Xing</label>
+            <label><input type="checkbox" id="scraper_monster"> Monster</label>
+            <label><input type="checkbox" id="scraper_buildin"> Built In</label>
+            <label><input type="checkbox" id="scraper_flexjobs"> FlexJobs</label>
+            <label><input type="checkbox" id="scraper_weworkremotely"> We Work Remotely</label>
         </div>
     </section>
 
@@ -136,15 +142,17 @@ class DigestHandler(BaseHTTPRequestHandler):
             document.getElementById('locations').value = (config.locations || []).join('\n');
             document.getElementById('cv_text').value = config.cv_text || '';
             document.getElementById('match_threshold').value = config.match_threshold || 0.75;
-            ['linkedin', 'stepstone', 'xing'].forEach(s => {
-                const checked = !config.enabled_scrapers || config.enabled_scrapers.includes(s);
+            const defaultScrapers = ['linkedin', 'indeed', 'glassdoor', 'stepstone', 'xing'];
+            const allScrapers = ['linkedin', 'indeed', 'glassdoor', 'stepstone', 'xing', 'monster', 'buildin', 'flexjobs', 'weworkremotely'];
+            allScrapers.forEach(s => {
+                const checked = !config.enabled_scrapers ? defaultScrapers.includes(s) : config.enabled_scrapers.includes(s);
                 document.getElementById('scraper_' + s).checked = checked;
             });
         }
 
         function saveSettings() {
-            const enabledScrapers = ['linkedin', 'stepstone', 'xing']
-                .filter(s => document.getElementById('scraper_' + s).checked);
+            const allScrapers = ['linkedin', 'indeed', 'glassdoor', 'stepstone', 'xing', 'monster', 'buildin', 'flexjobs', 'weworkremotely'];
+            const enabledScrapers = allScrapers.filter(s => document.getElementById('scraper_' + s).checked);
             const config = {
                 roles: document.getElementById('roles').value.split('\n').filter(r => r.trim()),
                 locations: document.getElementById('locations').value.split('\n').filter(l => l.trim()),
