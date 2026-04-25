@@ -45,24 +45,24 @@ class DigestHandler(BaseHTTPRequestHandler):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Job Agent Settings</title>
     <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; color: #333; }}
-        h1 {{ color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }}
-        nav {{ margin-bottom: 30px; }}
-        nav a {{ margin-right: 20px; text-decoration: none; color: #3498db; font-weight: 500; }}
-        nav a.active {{ color: #2c3e50; border-bottom: 2px solid #3498db; }}
-        section {{ margin-bottom: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; }}
-        h2 {{ color: #2c3e50; font-size: 18px; margin-top: 0; }}
-        textarea, input[type="text"], input[type="number"] {{ width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; box-sizing: border-box; }}
-        input[type="number"] {{ font-family: inherit; }}
-        .checkbox-group {{ margin: 10px 0; }}
-        .checkbox-group label {{ display: block; margin: 8px 0; }}
-        .checkbox-group input[type="checkbox"] {{ margin-right: 8px; }}
-        button {{ background: #3498db; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; margin: 10px 0; margin-right: 10px; }}
-        button:hover {{ background: #2980b9; }}
-        .hint {{ font-size: 14px; color: #666; margin-top: 8px; }}
-        #status {{ margin-top: 10px; padding: 10px; border-radius: 4px; display: none; }}
-        #status.success {{ background: #d4edda; color: #155724; display: block; }}
-        #status.error {{ background: #f8d7da; color: #721c24; display: block; }}
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; color: #333; }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        nav { margin-bottom: 30px; }
+        nav a { margin-right: 20px; text-decoration: none; color: #3498db; font-weight: 500; }
+        nav a.active { color: #2c3e50; border-bottom: 2px solid #3498db; }
+        section { margin-bottom: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; }
+        h2 { color: #2c3e50; font-size: 18px; margin-top: 0; }
+        textarea, input[type="text"], input[type="number"] { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; box-sizing: border-box; }
+        input[type="number"] { font-family: inherit; }
+        .checkbox-group { margin: 10px 0; }
+        .checkbox-group label { display: block; margin: 8px 0; }
+        .checkbox-group input[type="checkbox"] { margin-right: 8px; }
+        button { background: #3498db; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; margin: 10px 0; margin-right: 10px; }
+        button:hover { background: #2980b9; }
+        .hint { font-size: 14px; color: #666; margin-top: 8px; }
+        #status { margin-top: 10px; padding: 10px; border-radius: 4px; display: none; }
+        #status.success { background: #d4edda; color: #155724; display: block; }
+        #status.error { background: #f8d7da; color: #721c24; display: block; }
     </style>
 </head>
 <body>
@@ -130,152 +130,152 @@ class DigestHandler(BaseHTTPRequestHandler):
     <script>
         const STORAGE_KEY = 'jobAgentConfig';
 
-        function loadSettings() {{
-            const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{{}}');
-            document.getElementById('roles').value = (config.roles || []).join('\\n');
-            document.getElementById('locations').value = (config.locations || []).join('\\n');
+        function loadSettings() {
+            const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            document.getElementById('roles').value = (config.roles || []).join('\n');
+            document.getElementById('locations').value = (config.locations || []).join('\n');
             document.getElementById('cv_text').value = config.cv_text || '';
             document.getElementById('match_threshold').value = config.match_threshold || 0.75;
-            ['linkedin', 'stepstone', 'xing'].forEach(s => {{
+            ['linkedin', 'stepstone', 'xing'].forEach(s => {
                 const checked = !config.enabled_scrapers || config.enabled_scrapers.includes(s);
                 document.getElementById('scraper_' + s).checked = checked;
-            }});
-        }}
+            });
+        }
 
-        function saveSettings() {{
+        function saveSettings() {
             const enabledScrapers = ['linkedin', 'stepstone', 'xing']
                 .filter(s => document.getElementById('scraper_' + s).checked);
-            const config = {{
-                roles: document.getElementById('roles').value.split('\\n').filter(r => r.trim()),
-                locations: document.getElementById('locations').value.split('\\n').filter(l => l.trim()),
+            const config = {
+                roles: document.getElementById('roles').value.split('\n').filter(r => r.trim()),
+                locations: document.getElementById('locations').value.split('\n').filter(l => l.trim()),
                 cv_text: document.getElementById('cv_text').value,
                 match_threshold: parseFloat(document.getElementById('match_threshold').value) || 0.75,
                 enabled_scrapers: enabledScrapers,
-            }};
+            };
             localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
             showStatus('✅ Settings saved to browser cache', 'success');
-        }}
+        }
 
-        function showStatus(msg, cls) {{
+        function showStatus(msg, cls) {
             const status = document.getElementById('status');
             status.textContent = msg;
             status.className = cls;
-        }}
+        }
 
-        async function uploadCV(mode) {{
+        async function uploadCV(mode) {
             const formData = new FormData();
             let cvText = null;
 
-            if (mode === 'file') {{
+            if (mode === 'file') {
                 const file = document.getElementById('cv_file').files[0];
-                if (!file) {{
+                if (!file) {
                     alert('Please select a PDF file');
                     return;
-                }}
+                }
                 formData.append('cv_file', file);
-            }} else {{
+            } else {
                 cvText = document.getElementById('cv_text').value;
-                if (!cvText.trim()) {{
+                if (!cvText.trim()) {
                     alert('Please paste some CV text');
                     return;
-                }}
+                }
                 formData.append('cv_text', cvText);
-            }}
+            }
 
-            try {{
-                const r = await fetch('/upload-cv', {{ method: 'POST', body: formData }});
+            try {
+                const r = await fetch('/upload-cv', { method: 'POST', body: formData });
                 const data = await r.json();
-                if (data.ok) {{
-                    const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{{}}');
+                if (data.ok) {
+                    const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
                     config.cv_text = data.cv_text;
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
                     document.getElementById('cv_text').value = data.cv_text;
                     showStatus('✅ CV saved (' + data.cv_text.length + ' characters)', 'success');
-                }} else {{
+                } else {
                     showStatus('❌ Error: ' + (data.error || 'Unknown error'), 'error');
-                }}
-            }} catch (e) {{
+                }
+            } catch (e) {
                 showStatus('❌ Error: ' + e.message, 'error');
-            }}
-        }}
+            }
+        }
 
-        async function startRun() {{
-            const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{{}}');
-            if (!config.roles || config.roles.length === 0) {{
+        async function startRun() {
+            const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            if (!config.roles || config.roles.length === 0) {
                 alert('Please add at least one role keyword before starting search');
                 return;
-            }}
-            if (!config.locations || config.locations.length === 0) {{
+            }
+            if (!config.locations || config.locations.length === 0) {
                 alert('Please add at least one location before starting search');
                 return;
-            }}
-            try {{
-                const r = await fetch('/run', {{
+            }
+            try {
+                const r = await fetch('/run', {
                     method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}},
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(config),
-                }});
+                });
                 const data = await r.json();
                 const status = document.getElementById('run-status');
-                if (data.ok) {{
+                if (data.ok) {
                     status.innerHTML = '✅ Search started! Check the <a href="/">Job Digest</a> to see results.';
-                }} else {{
+                } else {
                     status.textContent = '⚠️ ' + (data.error || 'Could not start search');
-                }}
-            }} catch (e) {{
+                }
+            } catch (e) {
                 document.getElementById('run-status').textContent = '❌ Error: ' + e.message;
-            }}
-        }}
+            }
+        }
 
-        async function clearDatabase() {{
-            if (!confirm('Clear all old jobs from the database? You will only see new jobs from your next search.')) {{
+        async function clearDatabase() {
+            if (!confirm('Clear all old jobs from the database? You will only see new jobs from your next search.')) {
                 return;
-            }}
-            try {{
-                const r = await fetch('/clear-db', {{ method: 'POST' }});
+            }
+            try {
+                const r = await fetch('/clear-db', { method: 'POST' });
                 const data = await r.json();
                 const status = document.getElementById('run-status');
-                if (data.ok) {{
+                if (data.ok) {
                     status.textContent = '✅ Old jobs cleared! Next search will start fresh.';
-                }} else {{
+                } else {
                     status.textContent = '❌ Error: ' + (data.error || 'Could not clear database');
-                }}
-            }} catch (e) {{
+                }
+            } catch (e) {
                 document.getElementById('run-status').textContent = '❌ Error: ' + e.message;
-            }}
-        }}
+            }
+        }
 
-        async function showCurrentCV() {{
-            const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{{}}');
+        async function showCurrentCV() {
+            const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
             const preview = document.getElementById('cv-preview');
             const cvText = config.cv_text || '';
-            if (cvText) {{
+            if (cvText) {
                 preview.textContent = cvText.substring(0, 1000);
-                if (cvText.length > 1000) {{
-                    preview.textContent += '\\n\\n... (' + (cvText.length - 1000) + ' more characters)';
-                }}
+                if (cvText.length > 1000) {
+                    preview.textContent += '\n\n... (' + (cvText.length - 1000) + ' more characters)';
+                }
                 preview.style.display = 'block';
-            }} else {{
+            } else {
                 preview.textContent = 'No CV loaded';
                 preview.style.display = 'block';
-            }}
-        }}
+            }
+        }
 
-        async function clearCV() {{
-            if (!confirm('Clear the uploaded CV? You will need to upload a new one.')) {{
+        async function clearCV() {
+            if (!confirm('Clear the uploaded CV? You will need to upload a new one.')) {
                 return;
-            }}
-            try {{
-                const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{{}}');
+            }
+            try {
+                const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
                 config.cv_text = '';
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
                 document.getElementById('cv_text').value = '';
                 showStatus('✅ CV cleared. Upload a new one.', 'success');
                 document.getElementById('cv-preview').style.display = 'none';
-            }} catch (e) {{
+            } catch (e) {
                 showStatus('❌ Error: ' + e.message, 'error');
-            }}
-        }}
+            }
+        }
 
         window.addEventListener('load', loadSettings);
     </script>
