@@ -413,7 +413,9 @@ class DigestHandler(BaseHTTPRequestHandler):
 
 def _make_server(days, port):
     DigestHandler.days = days
-    return HTTPServer(("localhost", port), DigestHandler)
+    httpd = HTTPServer(("localhost", port), DigestHandler)
+    httpd.allow_reuse_address = True
+    return httpd
 
 
 def start_server_thread(days: int = 30, port: int = 8765):
