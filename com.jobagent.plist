@@ -3,8 +3,11 @@
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   com.jobagent.plist
-  ─────────────────────────────────────────────────────────
-  macOS launchd agent — runs job_agent every hour.
+  ---------------------------------------------------------
+  Optional macOS launchd agent.
+
+  This starts the local Job Agent browser UI when you log in. For most users,
+  running `python main.py` manually is simpler.
 
   INSTALLATION:
     1. Edit the paths below to match where you cloned this project.
@@ -14,45 +17,39 @@
          launchctl load ~/Library/LaunchAgents/com.jobagent.plist
     4. To unload (stop):
          launchctl unload ~/Library/LaunchAgents/com.jobagent.plist
-    5. To run manually right now:
+    5. To start manually right now:
          launchctl start com.jobagent
     6. Check logs:
          tail -f /tmp/job_agent.log
-  ─────────────────────────────────────────────────────────
+  ---------------------------------------------------------
 -->
 <plist version="1.0">
 <dict>
   <key>Label</key>
   <string>com.jobagent</string>
 
-  <!-- ── EDIT THIS: full path to your Python in the venv ── -->
+  <!-- EDIT THIS: full path to your Python in the venv -->
   <key>ProgramArguments</key>
   <array>
     <string>/Users/YOUR_USERNAME/job_agent/venv/bin/python</string>
     <string>/Users/YOUR_USERNAME/job_agent/main.py</string>
   </array>
 
-  <!-- ── EDIT THIS: path to the project folder ── -->
+  <!-- EDIT THIS: path to the project folder -->
   <key>WorkingDirectory</key>
   <string>/Users/YOUR_USERNAME/job_agent</string>
 
-  <!-- Run every 3600 seconds = every hour -->
-  <key>StartInterval</key>
-  <integer>3600</integer>
-
-  <!-- Also run immediately when agent is loaded -->
+  <!-- Run when the LaunchAgent is loaded, usually at login. -->
   <key>RunAtLoad</key>
   <true/>
 
-  <!-- Environment variables (API keys go here) -->
+  <!-- Optional local settings. Change OLLAMA_MODEL if you use another model. -->
   <key>EnvironmentVariables</key>
   <dict>
-    <key>ANTHROPIC_API_KEY</key>
-    <string>YOUR_ANTHROPIC_API_KEY_HERE</string>
-    <key>GMAIL_APP_PASSWORD</key>
-    <string>YOUR_GMAIL_APP_PASSWORD_HERE</string>
+    <key>OLLAMA_MODEL</key>
+    <string>llama3.2</string>
     <key>PATH</key>
-    <string>/usr/local/bin:/usr/bin:/bin:/Users/YOUR_USERNAME/job_agent/venv/bin</string>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/Users/YOUR_USERNAME/job_agent/venv/bin</string>
   </dict>
 
   <!-- Logs -->

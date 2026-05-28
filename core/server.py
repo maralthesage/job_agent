@@ -123,14 +123,8 @@ console.log('Script loaded');
         <p class="hint">Select which job boards to search:</p>
         <div class="checkbox-group">
             <label><input type="checkbox" id="scraper_linkedin" checked> LinkedIn</label>
-            <label><input type="checkbox" id="scraper_indeed" checked> Indeed</label>
-            <label><input type="checkbox" id="scraper_glassdoor" checked> Glassdoor</label>
             <label><input type="checkbox" id="scraper_stepstone" checked> Stepstone</label>
             <label><input type="checkbox" id="scraper_xing" checked> Xing</label>
-            <label><input type="checkbox" id="scraper_monster"> Monster</label>
-            <label><input type="checkbox" id="scraper_buildin"> Built In</label>
-            <label><input type="checkbox" id="scraper_flexjobs"> FlexJobs</label>
-            <label><input type="checkbox" id="scraper_weworkremotely"> We Work Remotely</label>
         </div>
     </section>
 
@@ -162,6 +156,7 @@ console.log('Script loaded');
 
     <script>
         const STORAGE_KEY = 'jobAgentConfig';
+        const SUPPORTED_SCRAPERS = ['linkedin', 'stepstone', 'xing'];
 
         function loadSettings() {
             const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
@@ -170,17 +165,23 @@ console.log('Script loaded');
             document.getElementById('locations').value = (config.locations || []).join('\\n');
             document.getElementById('cv_text').value = config.cv_text || '';
             document.getElementById('match_threshold').value = config.match_threshold || 0.75;
-            const defaultScrapers = ['linkedin', 'indeed', 'glassdoor', 'stepstone', 'xing'];
-            const allScrapers = ['linkedin', 'indeed', 'glassdoor', 'stepstone', 'xing', 'monster', 'buildin', 'flexjobs', 'weworkremotely'];
-            allScrapers.forEach(s => {
-                const checked = !config.enabled_scrapers ? defaultScrapers.includes(s) : config.enabled_scrapers.includes(s);
+            const savedScrapers = Array.isArray(config.enabled_scrapers) ? config.enabled_scrapers : null;
+            let selectedScrapers = savedScrapers ? savedScrapers.filter(s => SUPPORTED_SCRAPERS.includes(s)) : SUPPORTED_SCRAPERS;
+            if (savedScrapers && savedScrapers.length > 0 && selectedScrapers.length === 0) {
+                selectedScrapers = SUPPORTED_SCRAPERS;
+            }
+            if (savedScrapers && selectedScrapers.length !== savedScrapers.length) {
+                config.enabled_scrapers = selectedScrapers;
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+            }
+            SUPPORTED_SCRAPERS.forEach(s => {
+                const checked = selectedScrapers.includes(s);
                 document.getElementById('scraper_' + s).checked = checked;
             });
         }
 
         function saveSettings() {
-            const allScrapers = ['linkedin', 'indeed', 'glassdoor', 'stepstone', 'xing', 'monster', 'buildin', 'flexjobs', 'weworkremotely'];
-            const enabledScrapers = allScrapers.filter(s => document.getElementById('scraper_' + s).checked);
+            const enabledScrapers = SUPPORTED_SCRAPERS.filter(s => document.getElementById('scraper_' + s).checked);
             const roles = document.getElementById('roles').value.split('\\n').map(r => r.trim()).filter(Boolean);
             const descriptionKeywords = document.getElementById('description_keywords').value.split('\\n').map(k => k.trim()).filter(Boolean);
             const locations = document.getElementById('locations').value.split('\\n').map(l => l.trim()).filter(Boolean);
@@ -279,8 +280,12 @@ console.log('Script loaded');
         async function startRun() {
             const config = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
             const descriptionKeywords = config.description_keywords || [];
+            const scrapers = (Array.isArray(config.enabled_scrapers) ? config.enabled_scrapers : SUPPORTED_SCRAPERS)
+                .filter(s => SUPPORTED_SCRAPERS.includes(s));
+            config.enabled_scrapers = scrapers;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
             if (!config.roles || config.roles.length === 0) {
-                showStatus('❌ VALIDATION ERROR: Please add at least one job title in the "Alternative Job Titles" section', 'error', 'run-status');
+                showStatus('❌ VALIDATION ERROR: Please add at least one job title in the "Role Keywords" section', 'error', 'run-status');
                 console.warn('[startRun] Validation failed: no roles');
                 return;
             }
@@ -289,7 +294,11 @@ console.log('Script loaded');
                 console.warn('[startRun] Validation failed: no locations');
                 return;
             }
-            const scrapers = config.enabled_scrapers || [];
+            if (!config.cv_text || !config.cv_text.trim()) {
+                showStatus('❌ VALIDATION ERROR: Please upload a PDF CV or paste your CV text before starting the search', 'error', 'run-status');
+                console.warn('[startRun] Validation failed: no CV text');
+                return;
+            }
             if (scrapers.length === 0) {
                 showStatus('❌ VALIDATION ERROR: Please select at least one job board to search', 'error', 'run-status');
                 console.warn('[startRun] Validation failed: no scrapers');

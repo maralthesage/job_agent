@@ -1,8 +1,8 @@
-# Virtual Environment
+# Virtual environments
 venv/
 env/
 ENV/
-.venv
+.venv/
 
 # Python
 __pycache__/
@@ -26,10 +26,14 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
 
-# IDE
+# Editors and local tools
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
@@ -37,24 +41,35 @@ MANIFEST
 *.sublime-project
 *.sublime-workspace
 
-# Environment
+# Local environment files
 .env
 .env.local
 .env.*.local
 
-# Data & Sensitive
-data/
-output/
+# Local app data
+data/*
+!data/.gitkeep
+!data/user_config.example.json
+output/*
+!output/.gitkeep
+!output/digests/
+output/digests/*
+!output/digests/.gitkeep
+
+# Databases, generated digests, and private documents
 *.db
 jobs.db
+*.sqlite
+*.sqlite3
+*.log
 resume*.txt
 resume*.md
 resume*.pdf
 resume*.docx
 config.json
+user_config.json
 
 # Testing
-.pytest_cache/
 .coverage
 htmlcov/
 

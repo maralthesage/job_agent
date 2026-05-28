@@ -1,10 +1,11 @@
 """
-agent.py — Ollama-powered job matching and resume optimization engine
+agent.py - Ollama-powered job matching and resume optimization engine
 Uses local Ollama for:
-  1. Scoring resume-to-job match (0.0–1.0)
+  1. Scoring resume-to-job match (0.0-1.0)
   2. Generating a tailored resume version for matched jobs
 """
 import json
+import os
 import re
 from typing import Dict, Tuple
 
@@ -12,15 +13,11 @@ import ollama
 
 from core.resume_data import USER_RESUME_EN, USER_RESUME_DE
 
-MODEL = "gemma4:e4b"
+MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 
 
 def _call(prompt: str, max_tokens: int = 2500) -> str:
-    """Call Ollama and return the text, stripping any <think> blocks.
-
-    Note: Qwen3 uses internal thinking which consumes ~1500 tokens,
-    so we need 2500+ tokens to leave room for the actual response.
-    """
+    """Call Ollama and return the response text."""
     try:
         response = ollama.chat(
             model=MODEL,
@@ -29,7 +26,7 @@ def _call(prompt: str, max_tokens: int = 2500) -> str:
         )
         text = response.message.content.strip()
 
-        # Qwen3 wraps reasoning in <think>...</think> — remove it
+        # Some models wrap reasoning in <think>...</think>; remove it.
         text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
         # Remove markdown code blocks (```json ... ``` or ``` ... ```)
@@ -39,6 +36,7 @@ def _call(prompt: str, max_tokens: int = 2500) -> str:
     except Exception as e:
         print(f"[Ollama] Error calling model '{MODEL}': {e}")
         print(f"[Ollama] Make sure Ollama is running: ollama serve")
+        print(f"[Ollama] Make sure the model is installed: ollama pull {MODEL}")
         raise
 
 
@@ -172,10 +170,10 @@ Respond ONLY with a valid JSON object (no markdown, no preamble) with these exac
 }}
 
 Scoring guide:
-- 0.9–1.0: near-perfect match (required skills present, strong experience/industry alignment)
-- 0.7–0.9: strong match (key skills present, matching industry or role type)
-- 0.5–0.7: moderate match (some relevant skills, but gaps in some technical skills or seniority)
-- 0.3–0.5: weak match (transferable skills present, but significant gaps or different domain)
+- 0.9-1.0: near-perfect match (required skills present, strong experience/industry alignment)
+- 0.7-0.9: strong match (key skills present, matching industry or role type)
+- 0.5-0.7: moderate match (some relevant skills, but gaps in some technical skills or seniority)
+- 0.3-0.5: weak match (transferable skills present, but significant gaps or different domain)
 - below 0.3: poor match (different career path or missing core competencies)
 
 EVALUATION CRITERIA:
@@ -185,12 +183,12 @@ EVALUATION CRITERIA:
 4. Industry/domain fit: Does the candidate's expertise align with the job domain?
 5. Experience level: Is the candidate's seniority and background appropriate?
 
-Be generous with scoring for jobs that match the target roles and contain relevant technical skills — the candidate is actively seeking these roles.
+Be generous with scoring for jobs that match the target roles and contain relevant technical skills; the candidate is actively seeking these roles.
 Prioritize skills match and role alignment. Do not be overly strict about having every single skill mentioned.
 """
 
     try:
-        raw = _call(prompt, max_tokens=2500)  # Qwen3 thinking consumes ~1500 tokens, leaving ~1000 for JSON
+        raw = _call(prompt, max_tokens=2500)
         raw = re.sub(r"```json|```", "", raw).strip()
 
         # Debug: show what we got back
@@ -246,12 +244,12 @@ def optimize_resume(job: Dict, match_details: Dict, cv_text: str = None) -> str:
 
 Your task is to tailor the candidate's resume for a specific job opportunity.
 
-STRICT RULES — violating any of these is unacceptable:
+STRICT RULES - violating any of these is unacceptable:
 1. DO NOT add any skill, tool, technology, certification, or experience that is not in the original resume
 2. DO NOT change job titles, dates, company names, education, or GPA
 3. DO NOT fabricate projects, achievements, or metrics
 4. You MAY reorder bullet points to surface the most relevant ones first
-5. You MAY rephrase existing bullet points to use the job description's exact keywords — but only when the meaning is the same
+5. You MAY rephrase existing bullet points to use the job description's exact keywords, but only when the meaning is the same
 6. You MAY expand or compress the profile/summary section using the candidate's real background
 7. You MAY reorder sections (e.g. put most relevant project first)
 8. Write in {lang} to match the job
@@ -267,7 +265,7 @@ Description: {description[:2500]}
 
 MATCH ANALYSIS:
 - Already matching skills: {matching}
-- Gaps (do NOT invent these — only highlight adjacent real skills): {missing}
+- Gaps (do NOT invent these; only highlight adjacent real skills): {missing}
 
 OUTPUT FORMAT:
 Return the complete tailored resume in clean Markdown format.

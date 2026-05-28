@@ -4,9 +4,9 @@ main.py — Job Agent entry point
 Orchestrates: scrape → deduplicate → score → html digest
 
 Usage:
-  python main.py              # start in digest/settings mode (no auto-scraping)
-  python main.py --test       # run with mock data (for testing)
-  python main.py --run        # immediately run scrape with loaded config
+  python main.py              # start the local browser UI
+  python main.py --run --test # run mock jobs through the scoring pipeline
+  python main.py --run        # run a search from data/user_config.json
 """
 import asyncio
 import argparse
@@ -30,14 +30,8 @@ def log(msg: str):
 
 # ── Scrapers ─────────────────────────────────────────────────────────────────
 async def run_scrapers(on_job=None, roles=None, locations=None, enabled_scrapers=None) -> list:
-    from scrapers.built_in import scrape_built_in
-    from scrapers.flexjobs import scrape_flexjobs
-    from scrapers.glassdoor import scrape_glassdoor
-    from scrapers.indeed import scrape_indeed
     from scrapers.linkedin import scrape_linkedin
-    from scrapers.monster import scrape_monster
     from scrapers.stepstone import scrape_stepstone
-    from scrapers.weworkremotely import scrape_weworkremotely
     from scrapers.xing import scrape_xing
 
     log("Starting scrapers...")
@@ -45,12 +39,6 @@ async def run_scrapers(on_job=None, roles=None, locations=None, enabled_scrapers
         "linkedin": (scrape_linkedin, "LinkedIn"),
         "stepstone": (scrape_stepstone, "Stepstone"),
         "xing": (scrape_xing, "Xing"),
-        "indeed": (scrape_indeed, "Indeed"),
-        "glassdoor": (scrape_glassdoor, "Glassdoor"),
-        "monster": (scrape_monster, "Monster"),
-        "buildin": (scrape_built_in, "Built In"),
-        "flexjobs": (scrape_flexjobs, "FlexJobs"),
-        "weworkremotely": (scrape_weworkremotely, "We Work Remotely"),
     }
 
     active = enabled_scrapers if enabled_scrapers else ["linkedin", "stepstone", "xing"]
@@ -244,8 +232,8 @@ def run_from_db(days: int = 30):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Job Agent")
-    parser.add_argument("--test", action="store_true", help="Use mock jobs (no real scraping)")
-    parser.add_argument("--run", action="store_true", help="Immediately run scrape with loaded config (not recommended)")
+    parser.add_argument("--test", action="store_true", help="Use mock jobs with --run")
+    parser.add_argument("--run", action="store_true", help="Run the pipeline from data/user_config.json")
     parser.add_argument("--days", type=int, default=30, help="How many days back to show")
     args = parser.parse_args()
 

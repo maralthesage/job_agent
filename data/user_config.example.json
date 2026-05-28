@@ -1,0 +1,24 @@
+{
+  "roles": [
+    "Data Analyst",
+    "Data Scientist",
+    "Machine Learning Engineer"
+  ],
+  "description_keywords": [
+    "Python",
+    "SQL",
+    "machine learning"
+  ],
+  "locations": [
+    "Berlin",
+    "Remote"
+  ],
+  "remote_ok": true,
+  "cv_text": "Paste your CV text here before using python main.py --run.",
+  "match_threshold": 0.75,
+  "enabled_scrapers": [
+    "linkedin",
+    "stepstone",
+    "xing"
+  ]
+}
